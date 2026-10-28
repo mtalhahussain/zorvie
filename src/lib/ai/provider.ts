@@ -139,7 +139,7 @@ export async function recordUsage(feature: string, provider: 'zai' | 'local', ok
 // ── shared error responses ──
 
 export const NO_PROVIDER_RESPONSE = {
-  error: 'AI is not configured on this server — add ZAI_API_KEY and ZAI_BASE_URL to .env and restart.',
+  error: 'AI is temporarily unavailable. Please try again later.',
   code: 'NO_PROVIDER',
 } as const
 

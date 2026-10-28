@@ -137,8 +137,8 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
           <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-[12px] text-amber-100 flex items-start gap-2">
             <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-300" />
             <span>
-              <span className="font-semibold">AI not configured.</span> Translate needs an AI provider set up on the
-              server (ZAI_API_KEY). Your design is unchanged.
+              <span className="font-semibold">AI unavailable.</span> Translate is temporarily unavailable. Your design
+              is unchanged.
             </span>
           </div>
         )}

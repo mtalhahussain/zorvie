@@ -8,6 +8,7 @@
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "build:deploy": "bun run prepare-database && bun run build",
+    "vercel-build": "prisma migrate deploy && next build",
     "postinstall": "prisma generate",
     "lint": "eslint .",
     "test": "bun test",

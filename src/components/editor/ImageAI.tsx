@@ -10,8 +10,8 @@ import { Input } from '@/components/ui/input'
 import { toast } from '@/hooks/use-toast'
 import { useAICapabilities } from '@/hooks/use-ai-capabilities'
 
-const AI_OFF_TITLE = 'AI not configured'
-const AI_OFF_DESC = 'This tool needs an AI provider on the server (set ZAI_BASE_URL and ZAI_API_KEY). BG Remover still works offline.'
+const AI_OFF_TITLE = 'AI unavailable'
+const AI_OFF_DESC = 'This tool is temporarily unavailable. BG Remover still works.'
 
 interface EditResponse {
   dataUrl?: string

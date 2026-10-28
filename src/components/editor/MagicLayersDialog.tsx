@@ -136,7 +136,7 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
   const runAnalysis = async (dataUrl: string) => {
     if (aiLoaded && !aiConfigured) {
       // no provider → don't round-trip; keep the image so it can be placed flat
-      setError('AI is not configured — add ZAI_API_KEY and ZAI_BASE_URL to .env to extract layers. You can still place the image flat.')
+      setError('Layer extraction is temporarily unavailable. You can still place the image flat.')
       setStage('upload')
       return
     }
@@ -260,7 +260,7 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
         {aiLoaded && !aiConfigured && stage === 'upload' && (
           <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200/90">
             <div className="flex items-center gap-2 font-semibold">
-              <AlertTriangle size={15} /> AI provider not configured
+              <AlertTriangle size={15} /> AI unavailable
             </div>
             <p className="mt-1 text-amber-200/70">
               Automatic layer extraction needs a vision AI provider configured on the server. You can still place the

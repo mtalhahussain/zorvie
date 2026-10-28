@@ -249,7 +249,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void send(input)}
             disabled={aiOff}
-            placeholder={aiOff ? 'AI is not configured' : 'Ask your copilot…'}
+            placeholder={aiOff ? 'AI is temporarily unavailable' : 'Ask your copilot…'}
             maxLength={800}
             className="w-full bg-transparent outline-none text-[12.5px] text-white placeholder:text-white/35 h-10"
             aria-label="Message the Zorvie AI assistant"
