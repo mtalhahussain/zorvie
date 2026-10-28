@@ -1,18 +1,20 @@
-# Contributing to Canvix
+# Contributing to Zorvie
 
 Thanks for helping build the open-source Canva alternative! 🎨
 
 ## Getting set up
 
 ```bash
-git clone https://github.com/mir-ashiq/canvix.git
-cd canvix
+git clone <your-fork-url>
+cd zorvie
 bun install
 cp .env.example .env
 bun run db:push
 bun run db:seed
 bun run dev
 ```
+
+> Replace `<your-fork-url>` with your own fork URL when contributing under your name.
 
 > `bun run lint` must pass before every commit.
 

@@ -2,11 +2,11 @@
 
 <img src="public/canvix.svg" width="72" alt="Canvix logo" />
 
-# Canvix
+# Zorvie
 
 **Design anything. Free for everyone.**
 
-Free & open-source graphic design tool — a community-built [Canva](https://canva.com) alternative.
+Zorvie is a free & open-source graphic design tool — a community-built [Canva](https://canva.com) alternative.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-00C4CC.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js%2016-black?logo=next.js)](https://nextjs.org)
@@ -20,9 +20,9 @@ Free & open-source graphic design tool — a community-built [Canva](https://can
 
 ---
 
-## ✨ What is Canvix?
+## ✨ What is Zorvie?
 
-Canvix is a browser-based design tool that lets anyone create social media posts,
+Zorvie is a browser-based design tool that lets anyone create social media posts,
 presentations, posters, logos and thumbnails — with a drag-and-drop editor, a template
 library and one-click export. It runs entirely on your own infrastructure, stores designs
 in your own database, and exports files locally in your browser. No accounts, no
@@ -269,8 +269,8 @@ watermarks, no paywalls.
 > **Prerequisites:** [Node.js 20+](https://nodejs.org) or [Bun](https://bun.sh), and a [PostgreSQL](https://www.postgresql.org) **or** [MySQL 8](https://www.mysql.com) database (local install, Docker, a free serverless host like [Neon](https://neon.tech), or shared hosting).
 
 ```bash
-git clone https://github.com/mir-ashiq/canvix.git
-cd canvix
+git clone <your-fork-url>
+cd zorvie
 cp .env.example .env   # then set DATABASE_URL (postgresql://… or mysql://…)
 bun install            # or: npm install — also runs `prisma generate` for that provider
 
@@ -292,7 +292,7 @@ bun run start
 
 ## 🗄 Database (PostgreSQL or MySQL)
 
-Canvix runs on either database from the same code. **`DATABASE_URL` alone picks
+Zorvie runs on either database from the same code. **`DATABASE_URL` alone picks
 the provider** — `prisma.config.ts` reads its prefix and selects the schema and
 migrations folder:
 
@@ -391,7 +391,7 @@ research/                   # architecture decision records & audits
 
 ## 🤖 AI provider setup
 
-Canvix works fully **without** any AI provider — the editor, templates, exports,
+Zorvie works fully **without** any AI provider — the editor, templates, exports,
 collaboration and comments need nothing but the database. AI features
 (Magic Layers, Assistant, Magic Write, image generation/editing, translate,
 photo search) activate when a provider is configured **on the server**:
@@ -539,8 +539,9 @@ Contributions are very welcome! Areas that especially need help:
 
 ## ⚖️ License
 
-[MIT](LICENSE) © 2026 Ashiq Hussain Mir
+[MIT](LICENSE) © 2026 Talha Hussain
 
-Canvix is an independent open-source project and is not affiliated with, endorsed by,
+Zorvie is an independent open-source project and is not affiliated with, endorsed by,
 or connected to Canva.
-# zorvie
+
+Maintained by Talha Hussain.
