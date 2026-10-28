@@ -5,14 +5,23 @@ import type Konva from 'konva'
 import { Layer, Rect, Stage } from 'react-konva'
 import type { PageData } from '@/lib/types'
 import { gradientProps } from '@/lib/editor-utils'
-import { animateElementAt, pageAnimationDuration } from '@/lib/animations'
+import {
+  animateElementAt,
+  applyAnimationState,
+  captureAnimationBase,
+  pageAnimationDuration,
+  pageHasLoopingAnimation,
+  restoreAnimationBase,
+  type AnimationNodeBase,
+} from '@/lib/animations'
 import { PreviewElements } from './element-node'
 
 interface PreviewStageProps {
   page: PageData
   designWidth: number
   designHeight: number
-  /** v0.5: play element animations (preview mode) */
+  /** v0.5: play element animations (preview mode). Off by default so
+   *  thumbnails (page bar, dashboard, templates) stay static. */
   animated?: boolean
   /** reset the timeline (bump = restart) */
   playKey?: number
@@ -25,7 +34,7 @@ interface PreviewStageProps {
  * clipped to page bounds. When `animated`, runs a rAF timeline that applies
  * entry animations to the element nodes (never mutates the document).
  */
-export default function PreviewStage({ page, designWidth, designHeight, animated = true, playKey = 0, reduceMotion = false }: PreviewStageProps) {
+export default function PreviewStage({ page, designWidth, designHeight, animated = false, playKey = 0, reduceMotion = false }: PreviewStageProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const layerRef = useRef<Konva.Layer | null>(null)
   const stageRef = useRef<Konva.Stage | null>(null)
@@ -54,81 +63,57 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
 
   // ── v0.5: element animation playback (rAF timeline over Konva nodes) ──
   const hasAnimations = animated && page.elements.some((e) => e.animation && e.animation.kind !== 'none')
+  // the Stage only mounts once the container is measured — re-run then, or playback never starts
+  const stageReady = scale > 0
   useEffect(() => {
     const layer = layerRef.current
     const stage = stageRef.current
-    if (!layer || !stage) return
+    if (!stageReady || !layer || !stage) return
     if (!hasAnimations || reduceMotion) {
-      // static: ensure all nodes are at base state
-      resetNodes(layer, page)
+      // static: nodes already sit at their final (document) state
+      layer.batchDraw()
       return
     }
 
-    const animatable = page.elements.filter((e) => e.animation && e.animation.kind !== 'none')
+    // look up by id with a predicate — `#id` selectors break on ids with
+    // selector characters (spaces, commas, dots)
+    const findNode = (id: string) => layer.findOne((n: Konva.Node) => n.id() === id)
+    const animatable = page.elements.filter((e) => e.visible && e.animation && e.animation.kind !== 'none')
     // capture base attrs once per play
-    const bases = new Map<string, { x: number; y: number; opacity: number; rotation: number; scaleX: number; scaleY: number; offsetX: number; offsetY: number }>()
+    const tracks: { el: (typeof animatable)[number]; node: Konva.Node; base: AnimationNodeBase }[] = []
     for (const el of animatable) {
-      const node = layer.findOne(`#${el.id}`)
+      const node = findNode(el.id)
       if (!node) continue
-      bases.set(el.id, {
-        x: node.x(),
-        y: node.y(),
-        opacity: node.opacity(),
-        rotation: node.rotation(),
-        scaleX: node.scaleX(),
-        scaleY: node.scaleY(),
-        offsetX: node.offsetX(),
-        offsetY: node.offsetY(),
-      })
+      tracks.push({ el, node, base: captureAnimationBase(node, el) })
     }
 
     const start = performance.now()
     const total = pageAnimationDuration(page) + 0.1
+    // breathe loops forever — keep the clock running while the preview is open
+    const loops = pageHasLoopingAnimation(page)
     let raf = 0
     let stopped = false
 
     const tick = (now: number) => {
       if (stopped) return
-      const t = Math.min((now - start) / 1000, total)
-      for (const el of animatable) {
-        const node = layer.findOne(`#${el.id}`)
-        const base = bases.get(el.id)
-        if (!node || !base) continue
+      const elapsed = Math.max(0, (now - start) / 1000)
+      const t = loops ? elapsed : Math.min(elapsed, total)
+      for (const { el, node, base } of tracks) {
         const state = animateElementAt(el, t)
-        node.opacity(base.opacity * state.opacity)
-        node.x(base.x + state.dx)
-        node.y(base.y + state.dy)
-        // scale relative to the node center (keep the base offset trick)
-        node.scaleX(base.scaleX * state.scaleX)
-        node.scaleY(base.scaleY * state.scaleY)
-        // wipe: approximate as a horizontal scale from the anchor edge
-        if (state.reveal < 1) {
-          const reveal = Math.max(0.001, state.reveal)
-          node.scaleX(base.scaleX * reveal)
-          const dir = el.animation?.direction ?? 'left'
-          if (dir === 'left') {
-            node.offsetX(base.offsetX)
-          } else if (dir === 'right') {
-            node.offsetX((el as { width: number }).width)
-            node.x(base.x + (el as { width: number }).width)
-          }
-        } else {
-          node.offsetX(base.offsetX)
-        }
-        if (state.rotation) {
-          node.rotation(base.rotation + state.rotation)
-        }
+        applyAnimationState(node, base, state, el.animation?.direction)
       }
       layer.batchDraw()
-      if (t < total) raf = requestAnimationFrame(tick)
+      if (loops || t < total) raf = requestAnimationFrame(tick)
     }
-    raf = requestAnimationFrame(tick)
+    // first frame synchronously — otherwise elements flash at their final state
+    tick(start)
     return () => {
       stopped = true
       cancelAnimationFrame(raf)
-      resetNodes(layer, page, bases)
+      for (const { node, base } of tracks) restoreAnimationBase(node, base)
+      layer.batchDraw()
     }
-  }, [page, hasAnimations, reduceMotion, playKey, designWidth, designHeight])
+  }, [page, hasAnimations, reduceMotion, playKey, designWidth, designHeight, stageReady])
 
   return (
     <div ref={containerRef} className="w-full h-full overflow-hidden" data-testid="preview-stage">
@@ -169,24 +154,4 @@ export default function PreviewStage({ page, designWidth, designHeight, animated
       )}
     </div>
   )
-}
-
-function resetNodes(layer: Konva.Layer, page: PageData, bases?: Map<string, { x: number; y: number; opacity: number; rotation: number; scaleX: number; scaleY: number; offsetX: number; offsetY: number }>) {
-  for (const el of page.elements) {
-    if (!el.animation || el.animation.kind === 'none') continue
-    const node = layer.findOne(`#${el.id}`)
-    const base = bases?.get(el.id)
-    if (!node) continue
-    if (base) {
-      node.opacity(base.opacity)
-      node.x(base.x)
-      node.y(base.y)
-      node.rotation(base.rotation)
-      node.scaleX(base.scaleX)
-      node.scaleY(base.scaleY)
-      node.offsetX(base.offsetX)
-      node.offsetY(base.offsetY)
-    }
-  }
-  layer.batchDraw()
 }

@@ -33,7 +33,7 @@ import { useAICapabilities } from '@/hooks/use-ai-capabilities'
 import type { ImageElement, PageData } from '@/lib/types'
 import { createImageElement, uid } from '@/lib/types'
 import { normalizeForAnalysis, normalizeSrcForAnalysis } from '@/lib/magic-layers/normalize'
-import { reconstructDesign, toPage, type MagicLayersReconstruction } from '@/lib/magic-layers/reconstruct'
+import { loadImage, reconstructDesign, toPage, type MagicLayersReconstruction } from '@/lib/magic-layers/reconstruct'
 import { REVIEW_CONFIDENCE_THRESHOLD, type MagicLayerAnalysis, type MagicRegion } from '@/lib/magic-layers/types'
 
 type Stage = 'upload' | 'analyzing' | 'review' | 'rebuilding'
@@ -134,17 +134,23 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
   }
 
   const runAnalysis = async (dataUrl: string) => {
+    if (aiLoaded && !aiConfigured) {
+      // no provider → don't round-trip; keep the image so it can be placed flat
+      setError('AI is not configured — add ZAI_API_KEY and ZAI_BASE_URL to .env to extract layers. You can still place the image flat.')
+      setStage('upload')
+      return
+    }
     try {
       const res = await fetch('/api/ai/magic-layers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: dataUrl }),
       })
-      const data = (await res.json()) as MagicLayerAnalysis & { error?: string; code?: string }
+      const data = (await res.json().catch(() => ({}))) as Partial<MagicLayerAnalysis> & { error?: string; code?: string }
       if (!res.ok || !Array.isArray(data.regions)) {
-        throw new Error(data.error ?? 'Analysis failed.')
+        throw new Error(data.error ?? `Analysis failed (HTTP ${res.status}).`)
       }
-      setAnalysis(data)
+      setAnalysis(data as MagicLayerAnalysis)
       setDiscarded(new Set(data.regions.filter((r) => r.confidence < 0.35).map((r) => r.id)))
       setStage('review')
     } catch (e) {
@@ -193,14 +199,28 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
     }
   }
 
-  const insertAsImage = () => {
+  const insertAsImage = async () => {
     if (!imageUrl) return
+    // fit the image inside the page keeping its aspect ratio (no stretching)
+    let nw = width
+    let nh = height
+    try {
+      const img = await loadImage(imageUrl)
+      nw = img.naturalWidth || width
+      nh = img.naturalHeight || height
+    } catch {
+      /* fall back to page size */
+    }
+    const scale = Math.min(width / nw, height / nh)
+    const w = Math.round(nw * scale)
+    const h = Math.round(nh * scale)
     addElementsBulk([
-      createImageElement(imageUrl, width, height, {
-        x: 0,
-        y: 0,
-        width,
-        height,
+      createImageElement(imageUrl, nw, nh, {
+        x: Math.round((width - w) / 2),
+        y: Math.round((height - h) / 2),
+        width: w,
+        height: h,
+        radius: 0,
         name: 'Original image (flat)',
       }),
     ])
@@ -457,7 +477,7 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
             </Button>
           )}
           {(stage === 'upload' || stage === 'review') && imageUrl && (
-            <Button variant="ghost" className="text-white/70 hover:bg-white/10 hover:text-white" onClick={insertAsImage}>
+            <Button variant="ghost" className="text-white/70 hover:bg-white/10 hover:text-white" onClick={() => void insertAsImage()}>
               <ImageIcon size={14} className="mr-1.5" /> Place flat instead
             </Button>
           )}

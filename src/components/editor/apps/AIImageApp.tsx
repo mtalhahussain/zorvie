@@ -7,6 +7,8 @@ import { useEditorStore } from '@/store/editor-store'
 import { AppHeader, type AppPanelProps } from './registry'
 import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
+import { useAICapabilities } from '@/hooks/use-ai-capabilities'
+import { AINotConfiguredNotice, postAI } from './ai-status'
 
 const SIZES = [
   { id: '1024x1024', label: 'Square 1:1', w: 1, h: 1 },
@@ -39,8 +41,8 @@ interface Generated {
 
 export function AIImageApp({ onClose }: AppPanelProps) {
   const addElement = useEditorStore((s) => s.addElement)
-  const pages = useEditorStore((s) => s.pages)
-  const currentPage = useEditorStore((s) => s.currentPage)
+  const ai = useAICapabilities()
+  const aiOff = ai.loaded && !ai.configured
   const designW = useEditorStore((s) => s.width)
   const designH = useEditorStore((s) => s.height)
 
@@ -52,19 +54,14 @@ export function AIImageApp({ onClose }: AppPanelProps) {
   const [error, setError] = useState<string | null>(null)
 
   const generate = async (regen = false) => {
-    if (!prompt.trim() || busy) return
+    if (!prompt.trim() || busy || aiOff) return
     setBusy(true)
     setError(null)
     if (!regen) setImage(null)
     try {
       const fullPrompt = style ? `${prompt}, ${style}` : prompt
-      const res = await fetch('/api/ai/image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: fullPrompt, size }),
-      })
-      const data = (await res.json()) as Generated & { error?: string }
-      if (!res.ok || !data.dataUrl) throw new Error(data.error ?? 'Generation failed')
+      const { ok, data } = await postAI<Generated>('/api/ai/image', { prompt: fullPrompt, size })
+      if (!ok || !data.dataUrl) throw new Error(data.error ?? 'Generation failed')
       setImage({ ...data, prompt: fullPrompt })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Generation failed')
@@ -94,12 +91,13 @@ export function AIImageApp({ onClose }: AppPanelProps) {
   return (
     <div>
       <AppHeader icon={ImageIcon} title="AI image generator" onClose={onClose} />
+      {aiOff && <AINotConfiguredNotice feature="AI image generation" />}
 
       <div className="rounded-xl border border-white/10 bg-white/[0.04] focus-within:border-[#7630D7] transition-colors p-3 mb-2.5">
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate() }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void generate() }}
           rows={2}
           maxLength={600}
           placeholder="Describe the image — e.g. “A dreamy purple nebula with a lone astronaut”"
@@ -141,7 +139,7 @@ export function AIImageApp({ onClose }: AppPanelProps) {
 
       <button
         onClick={() => generate()}
-        disabled={busy || !prompt.trim()}
+        disabled={busy || !prompt.trim() || aiOff}
         className="w-full h-10 rounded-xl bg-gradient-to-r from-[#7630D7] to-[#9B6BFF] text-white text-[13px] font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:brightness-110 transition-all"
         aria-label="Generate image"
       >
@@ -176,6 +174,7 @@ export function AIImageApp({ onClose }: AppPanelProps) {
           <div className="flex gap-2 mt-2">
             <button
               onClick={() => generate(true)}
+              disabled={aiOff}
               className="flex-1 h-8 rounded-lg border border-white/12 text-white/70 hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1.5"
               aria-label="Generate another"
             >

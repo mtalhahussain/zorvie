@@ -18,11 +18,12 @@ export function useAICapabilities() {
     fetch('/api/ai/capabilities')
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { configured?: boolean; capabilities?: { vision?: boolean } } | null) => {
-        if (cancelled || !data) return
+        if (cancelled) return
+        // a failed probe (non-2xx / empty body) counts as "not configured"
         setState({
           loaded: true,
-          configured: Boolean(data.configured),
-          vision: Boolean(data.capabilities?.vision),
+          configured: Boolean(data?.configured),
+          vision: Boolean(data?.capabilities?.vision),
         })
       })
       .catch(() => {

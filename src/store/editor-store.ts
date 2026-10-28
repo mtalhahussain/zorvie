@@ -45,6 +45,50 @@ interface HistoryEntry {
 // module-level clipboard (not reactive)
 let clipboard: AnyElement[] = []
 
+/** true when Copy/Cut has put something on the element clipboard */
+export function hasClipboard(): boolean {
+  return clipboard.length > 0
+}
+
+/**
+ * Translate an element by (dx, dy). Groups store their children in page
+ * coordinates, so the children have to move with the group or the content
+ * stays put while only the group box moves.
+ */
+function translateEl<T extends AnyElement>(el: T, dx: number, dy: number): T {
+  if (el.type === 'group') {
+    return { ...el, x: el.x + dx, y: el.y + dy, children: el.children.map((c) => translateEl(c, dx, dy)) } as T
+  }
+  return { ...el, x: el.x + dx, y: el.y + dy }
+}
+
+/** deep copy with fresh ids (group children too) so copies never share ids */
+function reidEl<T extends AnyElement>(el: T): T {
+  const copy = { ...clone(el), id: uid(el.type) } as T
+  if (copy.type === 'group') copy.children = copy.children.map((c) => reidEl(c))
+  return copy
+}
+
+type LayerDir = 'up' | 'down' | 'front' | 'back'
+
+/** reorder the given ids as one block move, keeping their relative order */
+function reorderIds(els: AnyElement[], ids: string[], dir: LayerDir): AnyElement[] {
+  const set = new Set(ids)
+  const arr = [...els]
+  if (dir === 'front') return [...arr.filter((e) => !set.has(e.id)), ...arr.filter((e) => set.has(e.id))]
+  if (dir === 'back') return [...arr.filter((e) => set.has(e.id)), ...arr.filter((e) => !set.has(e.id))]
+  if (dir === 'up') {
+    for (let i = arr.length - 2; i >= 0; i -= 1) {
+      if (set.has(arr[i].id) && !set.has(arr[i + 1].id)) [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]]
+    }
+  } else {
+    for (let i = 1; i < arr.length; i += 1) {
+      if (set.has(arr[i].id) && !set.has(arr[i - 1].id)) [arr[i], arr[i - 1]] = [arr[i - 1], arr[i]]
+    }
+  }
+  return arr
+}
+
 // ── v0.5 collaboration: op emission ─────────────────
 // The store is the single source of truth for local mutations. After every
 // LOCAL mutation it emits an op through the registered emitter (set by
@@ -130,6 +174,8 @@ interface EditorState {
 
   // element ops — live (no history) vs committed (history)
   addElement: (el: AnyElement) => void
+  /** insert at a stacking index (0 = back) as one undo step */
+  addElementAt: (el: AnyElement, index: number) => void
   updateElementsLive: (ids: string[], patch: Partial<Record<string, unknown>>) => void
   updateElements: (ids: string[], patch: Partial<Record<string, unknown>>) => void
   deleteSelection: () => void
@@ -138,6 +184,12 @@ interface EditorState {
   cutSelection: () => void
   pasteClipboard: () => void
   moveLayer: (id: string, dir: 'up' | 'down' | 'front' | 'back') => void
+  /** move several layers as one undoable step (keeps their relative order) */
+  moveLayers: (ids: string[], dir: 'up' | 'down' | 'front' | 'back') => void
+  /** arrow-key nudge: one undo step, skips locked elements, moves group children */
+  nudgeSelection: (dx: number, dy: number) => void
+  /** set absolute x/y for elements as one undo step; group children move with their group */
+  moveElementsTo: (positions: { id: string; x: number; y: number }[]) => void
   reorderLayer: (dragId: string, targetIndex: number) => void
   setLock: (ids: string[], locked: boolean) => void
   setVisible: (ids: string[], visible: boolean) => void
@@ -150,8 +202,11 @@ interface EditorState {
   addPage: () => void
   deletePage: (index: number) => void
   duplicatePage: (index: number) => void
+  movePage: (from: number, to: number) => void
   setCurrentPage: (index: number) => void
   setPageBackground: (bg: Background) => void
+  /** same as setPageBackground without a history entry (live colour-picker drags) */
+  setPageBackgroundLive: (bg: Background) => void
   applyTemplate: (t: TemplateDef) => void
 
   // zoom
@@ -174,7 +229,8 @@ interface EditorState {
   resizeDesign: (width: number, height: number) => void
 
   // v0.4: magic translate — batch-update text elements across ALL pages
-  translateTexts: (updates: { id: string; text: string }[]) => void
+  // (text elements get `text`; table elements get per-cell `cells` patches)
+  translateTexts: (updates: { id: string; text?: string; cells?: { index: number; text: string }[] }[]) => void
 
   // v0.5: magic layers — bulk element insertion + page replacement
   addElementsBulk: (els: AnyElement[]) => void
@@ -195,8 +251,9 @@ interface EditorState {
   setCommentsOpen: (open: boolean) => void
 
   // v0.5: animations
-  setElementAnimation: (ids: string[], animation: ElementAnimation | null) => void
-  setPageTransition: (transition: PageTransition | null) => void
+  /** `history: false` skips the undo snapshot (live slider drags — push it once yourself) */
+  setElementAnimation: (ids: string[], animation: ElementAnimation | null, opts?: { history?: boolean }) => void
+  setPageTransition: (transition: PageTransition | null, opts?: { history?: boolean }) => void
   magicAnimateCurrentPage: (speed?: 'slow' | 'medium' | 'fast') => void
   clearPageAnimations: () => void
   animateOpen: boolean
@@ -206,7 +263,8 @@ interface EditorState {
   // panels & save
   setPanel: (p: PanelId) => void
   markSaving: () => void
-  markSaved: () => void
+  /** pass the `version` the save started from: edits made meanwhile keep the design dirty */
+  markSaved: (savedVersion?: number) => void
 }
 
 const clone = <T,>(v: T): T => (typeof structuredClone === 'function' ? structuredClone(v) : JSON.parse(JSON.stringify(v)))
@@ -269,6 +327,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       tool: 'select',
       cropTargetId: null,
     })
+    // the brand kit is saved per-browser by the Brand panel — hydrate it here so
+    // everything reading `brand` (e.g. the Text panel's Brand Kit row) sees it
+    // without the Brand panel having been opened first
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('canvix:brandkit')
+        if (saved) set({ brand: { ...DEFAULT_BRAND, ...JSON.parse(saved) } })
+      } catch { /* ignore — keep the current kit */ }
+    }
     // v0.4: load server-side versions (Postgres); local list is the offline fallback
     const local = loadVersions(d.id)
     set({ versions: local })
@@ -359,6 +426,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     emit({ kind: 'element:add', pageId: next[currentPage].id, element: el })
   },
 
+  addElementAt: (el, index) => {
+    get().pushHistory()
+    const { pages, currentPage } = get()
+    const next = clone(pages)
+    const arr = next[currentPage].elements
+    arr.splice(Math.max(0, Math.min(index, arr.length)), 0, el)
+    set({ pages: next, selectedIds: [el.id] })
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
+  },
+
   updateElementsLive: (ids, patch) => {
     const { pages, currentPage, version } = get()
     const next = clone(pages)
@@ -392,7 +469,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const page = pages[currentPage]
     const clones = page.elements
       .filter((e) => selectedIds.includes(e.id))
-      .map((e) => ({ ...clone(e), id: uid(e.type), x: e.x + 32, y: e.y + 32 }))
+      .map((e) => translateEl(reidEl(e), 32, 32))
     const next = clone(pages)
     next[currentPage].elements = [...next[currentPage].elements, ...clones]
     set({ pages: next, selectedIds: clones.map((c) => c.id) })
@@ -414,7 +491,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   pasteClipboard: () => {
     if (!clipboard.length) return
     get().pushHistory()
-    const clones = clipboard.map((e) => ({ ...clone(e), id: uid(e.type), x: e.x + 32, y: e.y + 32 }))
+    const clones = clipboard.map((e) => translateEl(reidEl(e), 32, 32))
+    // cascade repeated pastes instead of stacking them on the same spot
+    clipboard = clone(clones)
     const { pages, currentPage } = get()
     const next = clone(pages)
     next[currentPage].elements = [...next[currentPage].elements, ...clones]
@@ -422,21 +501,51 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     emit({ kind: 'elements:add', pageId: next[currentPage].id, elements: clones })
   },
 
-  moveLayer: (id, dir) => {
-    get().pushHistory()
+  moveLayer: (id, dir) => get().moveLayers([id], dir),
+
+  moveLayers: (ids, dir) => {
+    if (!ids.length) return
     const { pages, currentPage } = get()
+    const before = pages[currentPage].elements
+    const ordered = reorderIds(before, ids, dir)
+    // already at the requested position -> no-op (no empty undo step)
+    if (ordered.every((e, i) => e.id === before[i].id)) return
+    get().pushHistory()
     const next = clone(pages)
-    const els = next[currentPage].elements
-    const i = els.findIndex((e) => e.id === id)
-    if (i === -1) return
-    let j = i
-    if (dir === 'up') j = Math.min(els.length - 1, i + 1)
-    if (dir === 'down') j = Math.max(0, i - 1)
-    if (dir === 'front') j = els.length - 1
-    if (dir === 'back') j = 0
-    els.splice(j, 0, ...els.splice(i, 1))
+    const byId = new Map(next[currentPage].elements.map((e) => [e.id, e]))
+    next[currentPage].elements = ordered.map((e) => byId.get(e.id)!)
     set({ pages: next })
-    emit({ kind: 'elements:reorder', pageId: next[currentPage].id, orderedIds: els.map((e) => e.id) })
+    emit({ kind: 'elements:reorder', pageId: next[currentPage].id, orderedIds: ordered.map((e) => e.id) })
+  },
+
+  nudgeSelection: (dx, dy) => {
+    const { selectedIds, pages, currentPage } = get()
+    const movable = pages[currentPage].elements.filter((e) => selectedIds.includes(e.id) && !e.locked)
+    if (!movable.length || (!dx && !dy)) return
+    get().pushHistory()
+    const next = clone(pages)
+    const ids = new Set(movable.map((e) => e.id))
+    next[currentPage].elements = next[currentPage].elements.map((e) => (ids.has(e.id) ? translateEl(e, dx, dy) : e))
+    set({ pages: next })
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
+  },
+
+  moveElementsTo: (positions) => {
+    const { pages, currentPage } = get()
+    const target = new Map(positions.map((p) => [p.id, p]))
+    const moves = pages[currentPage].elements.some((e) => {
+      const p = target.get(e.id)
+      return p && (p.x !== e.x || p.y !== e.y)
+    })
+    if (!moves) return
+    get().pushHistory()
+    const next = clone(pages)
+    next[currentPage].elements = next[currentPage].elements.map((e) => {
+      const p = target.get(e.id)
+      return p ? translateEl(e, p.x - e.x, p.y - e.y) : e
+    })
+    set({ pages: next })
+    emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
   },
 
   reorderLayer: (dragId, targetIndex) => {
@@ -513,13 +622,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = clone(pages)
     next[currentPage].elements = next[currentPage].elements.map((el) => {
       if (!ids.includes(el.id)) return el
+      // translate (not just set x/y) so group children follow the group
       switch (mode) {
-        case 'left': return { ...el, x: 0 }
-        case 'cx': return { ...el, x: Math.round((width - el.width) / 2) }
-        case 'right': return { ...el, x: width - el.width }
-        case 'top': return { ...el, y: 0 }
-        case 'cy': return { ...el, y: Math.round((height - el.height) / 2) }
-        case 'bottom': return { ...el, y: height - el.height }
+        case 'left': return translateEl(el, -el.x, 0)
+        case 'cx': return translateEl(el, Math.round((width - el.width) / 2) - el.x, 0)
+        case 'right': return translateEl(el, width - el.width - el.x, 0)
+        case 'top': return translateEl(el, 0, -el.y)
+        case 'cy': return translateEl(el, 0, Math.round((height - el.height) / 2) - el.y)
+        case 'bottom': return translateEl(el, 0, height - el.height - el.y)
       }
     })
     set({ pages: next })
@@ -528,14 +638,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   flipSelection: (axis) => {
     const { selectedIds, pages, currentPage } = get()
-    if (!selectedIds.length) return
+    // only images can mirror (flipH/flipV); other types have no flip fields, so
+    // they stay unchanged — and no empty undo step when nothing flips
+    if (!pages[currentPage].elements.some((el) => selectedIds.includes(el.id) && el.type === 'image')) return
     get().pushHistory()
     const next = clone(pages)
     next[currentPage].elements = next[currentPage].elements.map((el) => {
-      if (!selectedIds.includes(el.id)) return el
-      if (el.type === 'image') return { ...el, flipH: axis === 'h' ? !el.flipH : el.flipH, flipV: axis === 'v' ? !el.flipV : el.flipV }
-      // shapes/text: mirror via negative scale is not in the model; rotate 180 for symmetric flip feel
-      return { ...el, rotation: (el.rotation + (axis === 'h' ? 0 : 180)) % 360 }
+      if (!selectedIds.includes(el.id) || el.type !== 'image') return el
+      return { ...el, flipH: axis === 'h' ? !el.flipH : el.flipH, flipV: axis === 'v' ? !el.flipV : el.flipV }
     })
     set({ pages: next })
     emit({ kind: 'page:replace', pageId: next[currentPage].id, page: next[currentPage] })
@@ -543,10 +653,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   addPage: () => {
     get().pushHistory()
-    const { pages } = get()
+    const { pages, currentPage } = get()
     const page: PageData = { id: uid('page'), background: { type: 'solid', color: '#FFFFFF' }, elements: [] }
-    set({ pages: [...clone(pages), page] })
-    emit({ kind: 'page:add', page })
+    // canva: the new page goes right after the current one and becomes active
+    const next = clone(pages)
+    const at = Math.min(currentPage + 1, next.length)
+    next.splice(at, 0, page)
+    set({ pages: next, currentPage: at, selectedIds: [] })
+    emit({ kind: 'page:add', page, afterId: pages[at - 1]?.id })
   },
 
   deletePage: (index) => {
@@ -566,20 +680,39 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = clone(pages)
     const copy = clone(next[index])
     copy.id = uid('page')
-    copy.elements = copy.elements.map((e) => ({ ...e, id: uid(e.type) }))
+    copy.elements = copy.elements.map((e) => reidEl(e))
     next.splice(index + 1, 0, copy)
     set({ pages: next, currentPage: index + 1, selectedIds: [] })
     emit({ kind: 'page:add', page: copy, afterId: next[index].id })
   },
 
-  setCurrentPage: (index) => set({ currentPage: index, selectedIds: [] }),
+  movePage: (from, to) => {
+    const { pages, currentPage } = get()
+    if (from === to || from < 0 || to < 0 || from >= pages.length || to >= pages.length) return
+    get().pushHistory()
+    const next = clone(pages)
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    // keep the same page active after the move
+    const activeId = pages[currentPage]?.id
+    const active = Math.max(0, next.findIndex((p) => p.id === activeId))
+    set({ pages: next, currentPage: active })
+    emit({ kind: 'pages:replace', pages: next })
+  },
+
+  setCurrentPage: (index) =>
+    set({ currentPage: Math.max(0, Math.min(index, get().pages.length - 1)), selectedIds: [] }),
 
   setPageBackground: (bg) => {
     get().pushHistory()
-    const { pages, currentPage } = get()
+    get().setPageBackgroundLive(bg)
+  },
+
+  setPageBackgroundLive: (bg) => {
+    const { pages, currentPage, version } = get()
     const next = clone(pages)
     next[currentPage].background = bg
-    set({ pages: next })
+    set({ pages: next, version: version + 1, dirty: true })
     emit({ kind: 'page:background', pageId: next[currentPage].id, background: bg })
   },
 
@@ -711,11 +844,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (!updates.length) return
     get().pushHistory()
     const { pages, version } = get()
-    const map = new Map(updates.map((u) => [u.id, u.text]))
+    const map = new Map(updates.map((u) => [u.id, u]))
     const applyTexts = (els: AnyElement[]): AnyElement[] =>
       els.map((el) => {
         if (el.type === 'group') return { ...el, children: applyTexts(el.children) }
-        return map.has(el.id) ? ({ ...el, text: map.get(el.id)! } as AnyElement) : el
+        const u = map.get(el.id)
+        if (!u) return el
+        if (el.type === 'table' && u.cells?.length) {
+          const byIndex = new Map(u.cells.map((c) => [c.index, c.text]))
+          return { ...el, cells: el.cells.map((c, i) => (byIndex.has(i) ? { ...c, text: byIndex.get(i)! } : c)) }
+        }
+        if (el.type === 'text' && typeof u.text === 'string') return { ...el, text: u.text }
+        return el
       })
     const next = clone(pages).map((p) => ({ ...p, elements: applyTexts(p.elements) }))
     set({ pages: next, version: version + 1, dirty: true })
@@ -756,9 +896,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   // ── v0.5: animations ─────────────────
   toggleAnimate: () => set({ animateOpen: !get().animateOpen }),
   setAnimateOpen: (open) => set({ animateOpen: open }),
-  setElementAnimation: (ids, animation) => {
+  setElementAnimation: (ids, animation, opts) => {
     if (!ids.length) return
-    get().pushHistory()
+    if (opts?.history !== false) get().pushHistory()
+    else set({ dirty: true, version: get().version + 1 })
     const { pages, currentPage } = get()
     const next = clone(pages)
     next[currentPage].elements = next[currentPage].elements.map((e) =>
@@ -771,8 +912,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       page: next[currentPage],
     })
   },
-  setPageTransition: (transition) => {
-    get().pushHistory()
+  setPageTransition: (transition, opts) => {
+    if (opts?.history !== false) get().pushHistory()
+    else set({ dirty: true, version: get().version + 1 })
     const { pages, currentPage } = get()
     const next = clone(pages)
     next[currentPage] = { ...next[currentPage], transition: transition ?? undefined }
@@ -781,9 +923,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
   magicAnimateCurrentPage: (speed = 'medium') => {
     get().pushHistory()
-    const { pages, currentPage, height } = get()
+    const { pages, currentPage, height, width } = get()
     const next = clone(pages)
-    const animated = magicAnimatePage(next[currentPage], height, speed)
+    const animated = magicAnimatePage(next[currentPage], height, speed, width)
     next[currentPage] = animated
     set({ pages: next })
     emit({ kind: 'page:replace', pageId: animated.id, page: animated })
@@ -913,7 +1055,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   markSaving: () => set({ saving: true }),
-  markSaved: () => set({ saving: false, dirty: false, savedAt: Date.now() }),
+  markSaved: (savedVersion) =>
+    set({
+      saving: false,
+      // edits made while the request was in flight still need saving
+      dirty: savedVersion !== undefined && get().version !== savedVersion,
+      savedAt: Date.now(),
+    }),
 }))
 
 // ── selectors ────────────────────────────────────────────────

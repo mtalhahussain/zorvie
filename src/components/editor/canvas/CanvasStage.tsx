@@ -26,6 +26,8 @@ export default function CanvasStage() {
   const stageRef = useRef<Konva.Stage | null>(null)
   const layerRef = useRef<Konva.Layer | null>(null)
   const trRef = useRef<Konva.Transformer | null>(null)
+  /** the pan/zoom group that holds the top-level element nodes */
+  const elementsGroupRef = useRef<Konva.Group | null>(null)
   const nodesRef = useRef<Map<string, Konva.Node>>(new Map())
 
   const pages = useEditorStore((s) => s.pages)
@@ -33,6 +35,7 @@ export default function CanvasStage() {
   const width = useEditorStore((s) => s.width)
   const height = useEditorStore((s) => s.height)
   const zoom = useEditorStore((s) => s.zoom)
+  const designId = useEditorStore((s) => s.designId)
   const setZoom = useEditorStore((s) => s.setZoom)
   const setViewport = useEditorStore((s) => s.setViewport)
   const clearSelection = useEditorStore((s) => s.clearSelection)
@@ -145,13 +148,29 @@ export default function CanvasStage() {
     userZoomedRef.current = false
   }, [containerSize, width, height, setZoom, showRulers])
 
+  // a new design / design size (Magic Resize, template, version restore)
+  // always refits — the store resets zoom alongside, which must not count as
+  // a user zoom
+  const designKey = `${designId}:${width}x${height}`
+  const prevDesignKeyRef = useRef(designKey)
+  const designChangedRef = useRef(false)
+  useEffect(() => {
+    if (prevDesignKeyRef.current === designKey) return
+    prevDesignKeyRef.current = designKey
+    designChangedRef.current = true
+    userZoomedRef.current = false
+  }, [designKey])
+
   // fit on mount & on design size change & on resize (if user hasn't zoomed)
   useEffect(() => {
     if (containerSize.w < 50) return
     if (userZoomedRef.current) return
-    const raf = requestAnimationFrame(() => fitToScreen())
+    const raf = requestAnimationFrame(() => {
+      fitToScreen()
+      designChangedRef.current = false
+    })
     return () => cancelAnimationFrame(raf)
-  }, [containerSize.w, containerSize.h, width, height, fitToScreen])
+  }, [containerSize.w, containerSize.h, designKey, fitToScreen])
 
   // ── bridge registration ────────────────────────────────────
   useEffect(() => {
@@ -180,6 +199,10 @@ export default function CanvasStage() {
     prevZoomRef.current = zoom
     prevPanRef.current = pan
     if (prevZoom === zoom) return
+    // zoom set from the zoom bar / keyboard: stop auto-fitting on resize
+    // (opening a side panel would otherwise throw the chosen zoom away)
+    if (designChangedRef.current) designChangedRef.current = false
+    else userZoomedRef.current = true
     if (containerSize.w < 50) return
     // keep the page point under the viewport center stationary
     const cx = containerSize.w / 2
@@ -339,6 +362,15 @@ export default function CanvasStage() {
     containerRef.current?.style.setProperty('cursor', 'default')
   }
 
+  /** walk up from a Konva hit to the top-level element node (groups, tables,
+   *  text effects and frames are built from several child shapes) */
+  const topLevelElementId = (target: Konva.Node): string | null => {
+    let node: Konva.Node | null = target
+    while (node && node.parent && node.parent !== elementsGroupRef.current) node = node.parent
+    if (!node || node.parent !== elementsGroupRef.current || node.name() !== 'cv-element') return null
+    return node.id() || null
+  }
+
   // ── marquee helpers (page coords) ──────────────────────────
   const pagePoint = (clientX: number, clientY: number) => {
     const container = containerRef.current?.getBoundingClientRect()
@@ -352,7 +384,11 @@ export default function CanvasStage() {
   const selectInMarquee = (a: { x0: number; y0: number; x1: number; y1: number }) => {
     const x = Math.min(a.x0, a.x1), y = Math.min(a.y0, a.y1)
     const w = Math.abs(a.x1 - a.x0), h = Math.abs(a.y1 - a.y0)
-    if (w < 4 && h < 4) return
+    // a plain click on the empty canvas deselects (canva behaviour)
+    if (w < 4 && h < 4) {
+      clearSelection()
+      return
+    }
     const hits = page.elements
       .filter((e) => e.visible && !e.locked)
       .filter((e) => e.x < x + w && e.x + e.width > x && e.y < y + h && e.y + e.height > y)
@@ -422,10 +458,7 @@ export default function CanvasStage() {
         const pt = pagePoint(e.evt.clientX, e.evt.clientY)
         if (pt) {
           // resolve the top-level element under the click (walk up from the target)
-          let elementId: string | null = null
-          let node: Konva.Node | null = e.target
-          while (node && node.parent && node.parent !== layerRef.current) node = node.parent
-          if (node && node !== stageRef.current && node.id()) elementId = node.id()
+          const elementId = topLevelElementId(e.target)
           window.dispatchEvent(new CustomEvent('canvix:comment-drop', { detail: { ...pt, elementId } }))
         }
       }
@@ -547,14 +580,13 @@ export default function CanvasStage() {
   }, [pan, zoom, page])
 
   // ── right-click context menu ───────────────────────────────
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), [])
   const handleContextMenu = (e: KonvaEventObject<PointerEvent>) => {
     e.evt.preventDefault()
     if (editingMode !== 'editing') return
-    const target = e.target
-    const isElement = target.name() === 'cv-element'
-    if (isElement) {
-      const id = target.id()
-      if (id && !selectedIds.includes(id)) setSelection([id])
+    const id = topLevelElementId(e.target)
+    if (id) {
+      if (!selectedIds.includes(id)) setSelection([id])
       setCtxMenu({ x: e.evt.clientX, y: e.evt.clientY, kind: 'element' })
     } else {
       clearSelection()
@@ -706,7 +738,7 @@ export default function CanvasStage() {
         >
           <Layer ref={layerRef}>
             <Rect x={pan.x} y={pan.y} width={width * zoom} height={height * zoom} {...bgProps} name="page-bg" />
-            <Group x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>
+            <Group ref={elementsGroupRef} x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>
               {page.elements.map((el) => (
                 <ElementNode
                   key={el.id}
@@ -861,7 +893,7 @@ export default function CanvasStage() {
       {ctxMenu && (
         <CanvasContextMenu
           state={ctxMenu}
-          onClose={() => setCtxMenu(null)}
+          onClose={closeCtxMenu}
         />
       )}
 

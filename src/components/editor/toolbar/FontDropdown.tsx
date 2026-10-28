@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, ChevronDown, SlidersHorizontal, Star } from 'lucide-react'
 import { FONTS } from '@/lib/editor-utils'
 import { cn } from '@/lib/utils'
@@ -35,12 +36,26 @@ export function FontDropdown({ value, onChange }: FontDropdownProps) {
       const r = ref.current?.getBoundingClientRect()
       if (r) {
         const W = 262
-        const x = Math.min(r.left, window.innerWidth - W - 12)
+        const x = Math.max(8, Math.min(r.left, window.innerWidth - W - 12))
         const y = r.bottom + 6 > window.innerHeight - 340 ? Math.max(8, r.top - 346) : r.bottom + 6
         setPos({ x, y })
       }
     }
     setOpen(!open)
+  }
+
+  /** the Konva canvas does not repaint when a web font finishes loading, so make
+   *  sure the face is ready before applying it (falls through after 2.5s). */
+  const pickFont = async (family: string) => {
+    try {
+      if (typeof document !== 'undefined' && document.fonts) {
+        await Promise.race([
+          Promise.all([document.fonts.load(`400 32px "${family}"`), document.fonts.load(`700 32px "${family}"`)]),
+          new Promise((r) => setTimeout(r, 2500)),
+        ])
+      }
+    } catch { /* apply anyway */ }
+    onChange(family)
   }
 
   useEffect(() => {
@@ -62,7 +77,7 @@ export function FontDropdown({ value, onChange }: FontDropdownProps) {
         <ChevronDown size={12} className="opacity-60 shrink-0" />
       </button>
 
-      {open && pos && (
+      {open && pos && typeof document !== 'undefined' && createPortal(
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} onContextMenu={(e) => { e.preventDefault(); setOpen(false) }} />
           <div className="cv-menu !min-w-[262px] !max-w-[262px] !p-0" style={{ left: pos.x, top: pos.y }}>
@@ -102,7 +117,7 @@ export function FontDropdown({ value, onChange }: FontDropdownProps) {
               {list.map((f) => (
                 <button
                   key={f.family}
-                  onClick={() => { onChange(f.family); setOpen(false) }}
+                  onClick={() => { if (f.family !== value) void pickFont(f.family); setOpen(false) }}
                   className={cn(
                     'w-full flex items-center gap-2.5 px-3 h-[38px] text-left hover:bg-white/[0.07]',
                     value === f.family && 'bg-white/[0.09]'
@@ -120,7 +135,8 @@ export function FontDropdown({ value, onChange }: FontDropdownProps) {
               )}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )

@@ -267,7 +267,7 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
       const sy = s.height / 100
       const gradFill = s.fillGradient ? gradientRefFor(s, ctx) : s.fill
       const sw = s.strokeWidth / Math.max(0.01, sx)
-      return `  <path d="${sanitizePathData(s.pathData)}" transform="translate(${s.x} ${s.y}) scale(${sx.toFixed(4)} ${sy.toFixed(4)})${s.rotation ? ` rotate(${s.rotation} 0 0)` : ''}"${s.stroke && s.stroke !== 'transparent' && s.strokeWidth ? ` stroke="${s.stroke}" stroke-width="${sw}" vector-effect="non-scaling-stroke"` : ''} fill="${gradFill}"${opacityAttr(s)}${shadowAttrs(s, ctx)} />`
+      return `  <path d="${sanitizePathData(s.pathData)}" transform="translate(${s.x} ${s.y})${s.rotation ? ` rotate(${s.rotation})` : ''} scale(${sx.toFixed(4)} ${sy.toFixed(4)})"${s.stroke && s.stroke !== 'transparent' && s.strokeWidth ? ` stroke="${s.stroke}" stroke-width="${sw}" vector-effect="non-scaling-stroke"` : ''} fill="${gradFill}"${opacityAttr(s)}${shadowAttrs(s, ctx)} />`
     }
 
     case 'line': {
@@ -294,7 +294,7 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
       for (let i = 0; i + 1 < s.points.length; i += 2) {
         pts.push(`${(s.x + s.points[i]).toFixed(1)},${(s.y + s.points[i + 1]).toFixed(1)}`)
       }
-      return `  <polyline points="${pts.join(' ')}" fill="none" stroke="${s.stroke}" stroke-width="${s.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"${opacityAttr(s)} />`
+      return `  <polyline points="${pts.join(' ')}" fill="none" stroke="${s.stroke}" stroke-width="${s.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"${opacityAttr(s)}${transformBase ? ` transform="rotate(${s.rotation} ${s.x} ${s.y})"` : ''} />`
     }
 
     case 'image': {
@@ -310,7 +310,8 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
       const cyImg = im.y + im.height / 2
       const fx = im.flipH ? `translate(${2 * cxImg} 0) scale(-1 1)` : ''
       const fy = im.flipV ? `translate(0 ${2 * cyImg}) scale(1 -1)` : ''
-      const transform = [fx, fy, im.rotation ? `rotate(${im.rotation} ${cxImg} ${cyImg})` : '']
+      // outermost first: rotation pivots on the node origin (Konva), flips apply inside it
+      const transform = [im.rotation ? `rotate(${im.rotation} ${im.x} ${im.y})` : '', fx, fy]
         .filter(Boolean)
         .join(' ')
       return `  <image href="${esc(href)}" x="${im.x}" y="${im.y}" width="${im.width}" height="${im.height}"${clipId ? ` clip-path="url(#${clipId})"` : ''}${transform ? ` transform="${transform}"` : ''}${opacityAttr(im)}${shadowAttrs(im, ctx)} preserveAspectRatio="none" />`
@@ -320,7 +321,7 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
       const sk = el as StickerElement
       const cx = sk.x + sk.width / 2
       const cy = sk.y + sk.height / 2
-      return `  <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${sk.fontSize}" font-family="'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"${opacityAttr(sk)}${transformBase ? ` transform="rotate(${sk.rotation} ${cx} ${cy})"` : ''}>${esc(sk.char)}</text>`
+      return `  <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${sk.fontSize}" font-family="'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif"${opacityAttr(sk)}${transformBase ? ` transform="rotate(${sk.rotation} ${sk.x} ${sk.y})"` : ''}>${esc(sk.char)}</text>`
     }
 
     case 'group': {
@@ -449,13 +450,20 @@ function sanitizePathData(d: string): string {
 // ── page → SVG ───────────────────────────────────────────────
 
 /** Serialize one page to a standalone SVG document string. */
-export function exportPageToSVG(page: PageData, designWidth: number, designHeight: number): string {
+export function exportPageToSVG(
+  page: PageData,
+  designWidth: number,
+  designHeight: number,
+  opts: { transparent?: boolean } = {}
+): string {
   refCounter = 0
   const ctx: SvgContext = { defs: [] }
 
-  // background
+  // background (omitted for a transparent export)
   let bgOut = ''
-  if (page.background.type === 'solid') {
+  if (opts.transparent) {
+    // no background rect — the page stays see-through
+  } else if (page.background.type === 'solid') {
     bgOut = `  <rect width="${designWidth}" height="${designHeight}" fill="${esc(page.background.color)}" />`
   } else if (page.background.type === 'gradient') {
     const bgGrad: GradientFill = {
@@ -484,8 +492,13 @@ ${elements}
 }
 
 /** Serialize all pages → array of SVG strings (one file per page). */
-export function exportDesignToSVGs(pages: PageData[], designWidth: number, designHeight: number): string[] {
-  return pages.map((p) => exportPageToSVG(p, designWidth, designHeight))
+export function exportDesignToSVGs(
+  pages: PageData[],
+  designWidth: number,
+  designHeight: number,
+  opts: { transparent?: boolean } = {}
+): string[] {
+  return pages.map((p) => exportPageToSVG(p, designWidth, designHeight, opts))
 }
 
 /** Trigger a browser download of an SVG string. */

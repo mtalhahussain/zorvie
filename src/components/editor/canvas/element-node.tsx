@@ -126,41 +126,71 @@ function ImageNode({ el, common }: { el: ImageElement; common: Record<string, un
   )
 }
 
+/**
+ * One gesture (drag / transform) can involve several nodes: the Transformer
+ * drags and resizes every selected node together and each fires its own
+ * start/end events. Count them so the gesture records a single undo step.
+ */
+const gesture = { drag: 0, transform: 0 }
+// every gesture starts with a fresh pointer press — reset so a missed end
+// event (e.g. node unmounted mid-drag) can never swallow future undo steps
+if (typeof window !== 'undefined') {
+  window.addEventListener('pointerdown', () => { gesture.drag = 0; gesture.transform = 0 }, true)
+}
+
+/** start of a gesture on `id`: keep a multi-selection that already contains it */
+function beginGesture(kind: 'drag' | 'transform', id: string) {
+  const store = useEditorStore.getState()
+  if (gesture[kind] === 0) store.pushHistory()
+  gesture[kind] += 1
+  if (!store.selectedIds.includes(id)) store.setSelection([id])
+}
+
+function endGesture(kind: 'drag' | 'transform') {
+  gesture[kind] = Math.max(0, gesture[kind] - 1)
+}
+
 export function ElementNode({ element: el, interactive, hiding, hideCell, registerNode, onDragMoveNode, onDragEndNode, onDoubleClick, nested }: ElementNodeProps) {
-  const store = useEditorStore()
+  // read the store lazily in handlers — subscribing here would re-render every
+  // element on every store change (zoom, selection, typing…)
+  const store = useEditorStore.getState
 
   // ── shared interaction handlers ────────────────────────────
   const handleClick = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
     if (!interactive) return
     e.cancelBubble = true
-    const additive = !!e.evt && 'shiftKey' in e.evt && (e.evt as MouseEvent).shiftKey
+    const evt = e.evt as MouseEvent | undefined
+    const additive = !!evt && (evt.shiftKey || evt.ctrlKey || evt.metaKey)
     if (additive) {
-      store.selectToggle(el.id)
+      store().selectToggle(el.id)
     } else {
-      store.setSelection([el.id])
+      store().setSelection([el.id])
     }
   }
 
   const handleDragStart = () => {
     if (!interactive) return
-    store.pushHistory()
-    store.setSelection([el.id])
+    beginGesture('drag', el.id)
   }
 
   const handleDragMove = (node: Konva.Node) => {
     if (!interactive) return
-    // position is applied directly to the node; state is committed on dragEnd
+    // position is applied directly to the node; state is committed on dragEnd.
+    // Snapping only for single-element drags — snapping each node of a
+    // multi-selection separately would pull them apart.
+    if (store().selectedIds.length > 1) return
     onDragMoveNode?.(el.id, node)
   }
 
   const handleDragEnd = (node: Konva.Node) => {
     if (!interactive) return
+    endGesture('drag')
     if (el.type === 'group') {
       // bake drag delta into children so ungroup restores the moved positions
       const g = el as GroupElement
       const dx = node.x() - g.x
       const dy = node.y() - g.y
-      store.updateElementsLive([el.id], {
+      store().updateElementsLive([el.id], {
         x: Math.round(node.x()),
         y: Math.round(node.y()),
         children: g.children.map((c) => ({ ...c, x: Math.round(c.x + dx), y: Math.round(c.y + dy) })),
@@ -168,20 +198,20 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
       return
     }
     if (el.type === 'ellipse' || el.type === 'star') {
-      store.updateElementsLive([el.id], { x: node.x() - el.width / 2, y: node.y() - el.height / 2 })
+      store().updateElementsLive([el.id], { x: node.x() - el.width / 2, y: node.y() - el.height / 2 })
     } else {
-      store.updateElementsLive([el.id], { x: node.x(), y: node.y() })
+      store().updateElementsLive([el.id], { x: node.x(), y: node.y() })
     }
   }
 
   const handleTransformStart = () => {
     if (!interactive) return
-    store.pushHistory()
-    store.setSelection([el.id])
+    beginGesture('transform', el.id)
   }
 
   const handleTransformEnd = (node: Konva.Node) => {
     if (!interactive) return
+    endGesture('transform')
     const sx = Math.abs(node.scaleX())
     const sy = Math.abs(node.scaleY())
     // restore flip sign for images (transformer resets scale)
@@ -208,7 +238,7 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
         width: Math.max(4, c.width * sx),
         height: Math.max(4, c.height * sy),
       }))
-      store.updateElementsLive([el.id], {
+      store().updateElementsLive([el.id], {
         children,
         x: Math.round(node.x()),
         y: Math.round(node.y()),
@@ -233,7 +263,7 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
       // bake the scale into the point list (points are relative to x/y)
       const s = el as StrokeElement
       const scaled = s.points.map((v, i) => (i % 2 === 0 ? v * sx : v * sy))
-      store.updateElementsLive([el.id], {
+      store().updateElementsLive([el.id], {
         points: scaled,
         strokeWidth: Math.max(1, s.strokeWidth * (sx + sy) / 2),
         rotation: node.rotation(),
@@ -249,7 +279,8 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
       const t = el as TextElement
       patch.width = Math.max(12, el.width * sx)
       if (Math.abs(sy - 1) > 0.01) patch.fontSize = Math.max(6, t.fontSize * sy)
-      patch.height = node.height() * sy
+      // Group-based effects (Background / Splice) report height 0 — keep the stored one
+      patch.height = (node.height() || t.height) * sy
       patch.x = node.x()
       patch.y = node.y()
     } else if (el.type === 'sticker') {
@@ -274,7 +305,7 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
       }
     }
     patch.rotation = node.rotation()
-    store.updateElementsLive([el.id], patch)
+    store().updateElementsLive([el.id], patch)
   }
 
   const common = {

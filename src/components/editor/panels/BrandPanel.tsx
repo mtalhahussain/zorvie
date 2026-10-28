@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BookMarked, Wand2, Check, Plus, Palette, ImagePlus, Trash2, Layers, Type } from 'lucide-react'
 import { useEditorStore, selectedElements } from '@/store/editor-store'
 import { PanelShell } from './panel-shell'
@@ -42,6 +42,12 @@ export function BrandPanel() {
     return brand ?? DEFAULT_BRAND
   })
 
+  // the store's brand (used by the Text panel's Brand Kit row) starts at the
+  // default — sync it with the kit saved in this browser when the panel opens
+  useEffect(() => {
+    if (JSON.stringify(useEditorStore.getState().brand) !== JSON.stringify(local)) setBrand(local)
+  }, [])
+
   const persist = (b: BrandKit) => {
     setLocal(b)
     setBrand(b)
@@ -59,15 +65,19 @@ export function BrandPanel() {
       toast({ title: 'Select an element first' })
       return
     }
-    for (const el of selected) {
-      if (el.type === 'text' || ['rect', 'ellipse', 'triangle', 'star', 'path'].includes(el.type)) {
-        updateElements([el.id], { fill: c })
-      } else if (el.type === 'line' || el.type === 'stroke') {
-        updateElements([el.id], { stroke: c })
-      } else if (el.type === 'sticker') {
-        toast({ title: 'Stickers keep their own colours' })
-      }
+    const fillIds = selected
+      .filter((el) => el.type === 'text' || ['rect', 'ellipse', 'triangle', 'star', 'path'].includes(el.type))
+      .map((el) => el.id)
+    const strokeIds = selected.filter((el) => el.type === 'line' || el.type === 'stroke').map((el) => el.id)
+    if (!fillIds.length && !strokeIds.length) {
+      toast({ title: 'Brand colours apply to text, shapes and lines', description: 'Images, stickers and other elements keep their own colours.' })
+      return
     }
+    // one undo step for the whole recolour
+    const s = useEditorStore.getState()
+    s.pushHistory()
+    if (fillIds.length) s.updateElementsLive(fillIds, { fill: c })
+    if (strokeIds.length) s.updateElementsLive(strokeIds, { stroke: c })
     toast({ title: 'Brand colour applied' })
   }
 
@@ -88,6 +98,7 @@ export function BrandPanel() {
     const colors = local.colors
     let recoloured = 0
     let refonted = 0
+    const patches: { id: string; patch: Partial<Record<string, unknown>> }[] = []
     for (const el of page.elements) {
       const patch: Partial<Record<string, unknown>> = {}
       const current = fillColorOf(el)
@@ -107,8 +118,15 @@ export function BrandPanel() {
           refonted += 1
         }
       }
-      if (Object.keys(patch).length) updateElements([el.id], patch)
+      if (Object.keys(patch).length) patches.push({ id: el.id, patch })
     }
+    if (!patches.length) {
+      toast({ title: 'Page already matches your brand' })
+      return
+    }
+    // one undo step for the whole page restyle
+    s.pushHistory()
+    for (const { id, patch } of patches) s.updateElementsLive([id], patch)
     toast({ title: `Brand style applied — ${recoloured} recoloured, ${refonted} refonted` })
   }
 
@@ -161,7 +179,9 @@ export function BrandPanel() {
           height: Math.round(img.naturalHeight * scale),
         })
       )
+      toast({ title: 'Logo added to canvas' })
     }
+    img.onerror = () => toast({ title: 'Could not load this logo', variant: 'destructive' })
     img.src = src
   }
 

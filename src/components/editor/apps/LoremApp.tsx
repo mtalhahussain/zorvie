@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Type, RefreshCw } from 'lucide-react'
-import { createTextElement } from '@/lib/types'
 import { addTextStyled } from '../add-element'
 import { AppHeader, type AppPanelProps } from './registry'
 import { cn } from '@/lib/utils'
@@ -10,6 +9,12 @@ import { toast } from '@/hooks/use-toast'
 
 const LOREM = [
   'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore.',
+  'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo.',
+  'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.',
+  'Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.',
+]
+
+const REAL_FEEL = [
   'The quick brown fox jumps over the lazy dog while the calm river reflects the evening sky.',
   'Design is thinking made visual — iterate boldly, simplify relentlessly, and ship with intention.',
   'Coffee fuels the morning; curiosity fuels the craft. Every pixel earns its place.',
@@ -98,7 +103,7 @@ export function LoremApp({ onClose }: AppPanelProps) {
 }
 
 function buildText(real: boolean, lines: number, seed: number): string {
-  const pool = real ? LOREM.slice(1) : LOREM.slice(0, 2).concat(LOREM.slice(2))
+  const pool = real ? REAL_FEEL : LOREM
   const out: string[] = []
   for (let i = 0; i < lines; i++) {
     out.push(pool[(seed + i) % pool.length])

@@ -1,11 +1,30 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Pipette, Plus, ChevronRight, Search } from 'lucide-react'
 import { SOLID_SWATCHES, GRADIENT_PRESETS } from '@/lib/editor-utils'
 import { useEditorStore } from '@/store/editor-store'
 import type { GradientFill } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { toast } from '@/hooks/use-toast'
+
+/** normalise any CSS colour ("blue", "#0cf", "rgb(…)") via the canvas parser; null if invalid */
+function parseCssColor(input: string): string | null {
+  const s = input.trim()
+  if (!s) return null
+  const hex = s.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (hex) return hex[1].length === 3 ? '#' + hex[1].split('').map((c) => c + c).join('') : '#' + hex[1]
+  const ctx = document.createElement('canvas').getContext('2d')
+  if (!ctx) return null
+  // two different sentinels: an invalid colour leaves fillStyle unchanged
+  ctx.fillStyle = '#000001'
+  ctx.fillStyle = s
+  const a = ctx.fillStyle
+  ctx.fillStyle = '#000002'
+  ctx.fillStyle = s
+  return a === ctx.fillStyle ? a : null
+}
 
 interface ColorMenuProps {
   /** current colour value */
@@ -26,6 +45,7 @@ export function ColorMenu({ value, onChange, gradient, onGradient, title = 'Colo
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [hex, setHex] = useState(value)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const spectrumDirty = useRef(false)
   const brand = useEditorStore((s) => s.brand)
 
   useEffect(() => { setHex(value) }, [value])
@@ -42,20 +62,24 @@ export function ColorMenu({ value, onChange, gradient, onGradient, title = 'Colo
   }
 
   const apply = (c: string) => {
+    // re-applying the current solid colour would only add an empty undo step
+    if (!gradient && c.toLowerCase() === value.toLowerCase()) return
     onChange(c, true)
   }
 
   const tryHex = () => {
-    const m = hex.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i)
-    if (m) {
-      const h = m[1].length === 3 ? '#' + m[1].split('').map((c) => c + c).join('') : '#' + m[1]
-      apply(h)
-    }
+    if (hex.trim().toLowerCase() === value.toLowerCase()) return
+    const c = parseCssColor(hex)
+    if (c) apply(c)
+    else setHex(value)
   }
 
   const eyedropper = async () => {
     const EyeDropper = (window as unknown as { EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> } }).EyeDropper
-    if (!EyeDropper) return
+    if (!EyeDropper) {
+      toast({ title: 'Eyedropper not supported', description: 'Your browser has no colour picker API — try Chrome or Edge, or type a hex code.' })
+      return
+    }
     try {
       const res = await new EyeDropper().open()
       apply(res.sRGBHex)
@@ -81,10 +105,10 @@ export function ColorMenu({ value, onChange, gradient, onGradient, title = 'Colo
         )}
       </button>
 
-      {open && pos && (
+      {open && pos && typeof document !== 'undefined' && createPortal(
         <>
           <div className="fixed inset-0 z-[70]" onClick={() => setOpen(false)} onContextMenu={(e) => { e.preventDefault(); setOpen(false) }} />
-          <div className="cv-menu !min-w-[250px] !max-w-[250px] !p-0" style={{ left: pos.x, top: pos.y }}>
+          <div className="cv-menu !min-w-[250px] !max-w-[250px] !p-0 overflow-y-auto" style={{ left: pos.x, top: pos.y, maxHeight: `calc(100vh - ${pos.y + 8}px)` }}>
             {/* header */}
             <div className="flex items-center justify-between px-3 h-10 border-b border-white/[0.07]">
               <span className="text-[13px] font-bold text-white">{title}</span>
@@ -104,7 +128,8 @@ export function ColorMenu({ value, onChange, gradient, onGradient, title = 'Colo
                   onBlur={tryHex}
                   className="bg-transparent outline-none text-[12px] text-white w-full placeholder:text-white/35"
                   placeholder="Try “blue” or “#00c4cc”"
-                  maxLength={9}
+                  aria-label="Colour name or hex code"
+                  maxLength={32}
                 />
               </div>
             </div>
@@ -125,8 +150,8 @@ export function ColorMenu({ value, onChange, gradient, onGradient, title = 'Colo
                 <input
                   type="color"
                   value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff'}
-                  onChange={(e) => onChange(e.target.value, false)}
-                  onBlur={(e) => onChange(e.target.value, true)}
+                  onChange={(e) => { spectrumDirty.current = true; onChange(e.target.value, false) }}
+                  onBlur={(e) => { if (spectrumDirty.current) { spectrumDirty.current = false; onChange(e.target.value, true) } }}
                   className="absolute inset-0 opacity-0 cursor-pointer"
                   aria-label="Open spectrum picker"
                 />
@@ -212,6 +237,7 @@ export function ColorMenu({ value, onChange, gradient, onGradient, title = 'Colo
                           value={gradient.angle}
                           onChange={(e) => onGradient({ ...gradient, angle: Number(e.target.value) }, false)}
                           onPointerUp={() => onGradient(gradient, true)}
+                          onKeyUp={() => onGradient(gradient, true)}
                           className="flex-1 accent-[#7630D7] h-1.5"
                           aria-label="Gradient angle"
                         />
@@ -250,7 +276,8 @@ export function ColorMenu({ value, onChange, gradient, onGradient, title = 'Colo
               </Section>
             )}
           </div>
-        </>
+        </>,
+        document.body
       )}
     </>
   )

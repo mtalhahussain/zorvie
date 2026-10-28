@@ -11,7 +11,11 @@ const ICON_IDS = ['bolt', 'check-circle', 'arrow', 'heart', 'sparkle', 'moon', '
 
 export function IconsApp({ onClose }: AppPanelProps) {
   const [query, setQuery] = useState('')
-  const icons = GRAPHICS.filter((g) => ICON_IDS.includes(g.id) || (query && g.name.toLowerCase().includes(query.toLowerCase())))
+  const q = query.trim().toLowerCase()
+  // no query → curated icon set; with a query → search every graphic by name/id
+  const icons = q
+    ? GRAPHICS.filter((g) => g.name.toLowerCase().includes(q) || g.id.includes(q))
+    : GRAPHICS.filter((g) => ICON_IDS.includes(g.id))
   const [fill, setFill] = useState('#7630D7')
 
   return (

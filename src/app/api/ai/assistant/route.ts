@@ -295,8 +295,8 @@ export async function POST(req: NextRequest) {
 
     const completion = await zai.chat.completions.create({
       messages: [
-        { role: 'assistant', content: system },
-        { role: 'assistant', content: `Current design context:\n${designContext}` },
+        { role: 'system', content: system },
+        { role: 'system', content: `Current design context:\n${designContext}` },
         ...history,
         { role: 'user', content: message },
       ],

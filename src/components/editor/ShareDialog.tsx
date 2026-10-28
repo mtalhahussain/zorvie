@@ -13,13 +13,17 @@ type Access = 'private' | 'link' | 'public'
 const ACCESS_OPTS: { id: Access; label: string; desc: string; icon: typeof Lock }[] = [
   { id: 'private', label: 'Only me', desc: 'Private to you', icon: Lock },
   { id: 'link', label: 'Anyone with the link', desc: 'Can view or edit', icon: Link2 },
-  { id: 'public', label: 'Public', desc: 'Listed in the community gallery', icon: Globe },
+  { id: 'public', label: 'Public', desc: 'Fine to share anywhere', icon: Globe },
 ]
 
 function readSavedAccess(designId: string | null): Access {
   if (typeof window === 'undefined' || !designId) return 'link'
-  const saved = localStorage.getItem(`canvix:share:${designId}`)
-  return saved === 'private' || saved === 'public' ? saved : 'link'
+  try {
+    const saved = localStorage.getItem(`canvix:share:${designId}`)
+    return saved === 'private' || saved === 'public' ? saved : 'link'
+  } catch {
+    return 'link' // storage blocked (private mode)
+  }
 }
 
 /** Canva-style Share dialog — copy link + access levels (local-first). */
@@ -31,6 +35,10 @@ export function ShareDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   const link = designId ? `${typeof window !== 'undefined' ? window.location.origin : ''}/?design=${designId}` : ''
 
   const copy = async () => {
+    if (!link) {
+      toast({ title: 'Save the design first to get a share link', variant: 'destructive' })
+      return
+    }
     try {
       await navigator.clipboard.writeText(link)
       setCopied(true)
@@ -61,7 +69,12 @@ function ShareBody({ designId, designName, link, copied, onCopy }: {
 
   const setAccessAndPersist = (a: Access) => {
     setAccess(a)
-    if (designId) localStorage.setItem(`canvix:share:${designId}`, a)
+    if (!designId) return
+    try {
+      localStorage.setItem(`canvix:share:${designId}`, a)
+    } catch {
+      /* storage blocked — the choice still applies for this session */
+    }
   }
 
   return (
@@ -113,7 +126,7 @@ function ShareBody({ designId, designName, link, copied, onCopy }: {
         </div>
 
         <p className="text-[11px] text-white/40 flex items-center gap-1.5">
-          <QrCode size={13} /> In the open-source spirit — access control lives in your deployment, not our cloud.
+          <QrCode size={13} /> The access level is a reminder saved in this browser — anyone who can reach this Zorvie instance can open the link.
         </p>
       </div>
     </>

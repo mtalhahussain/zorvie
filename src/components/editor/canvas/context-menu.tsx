@@ -24,7 +24,7 @@ import {
   Crop,
   Ruler,
 } from 'lucide-react'
-import { useEditorStore } from '@/store/editor-store'
+import { hasClipboard, useEditorStore } from '@/store/editor-store'
 import { isGroup } from '@/lib/types'
 
 export interface ContextMenuState {
@@ -53,15 +53,19 @@ export function CanvasContextMenu({ state, onClose }: { state: ContextMenuState;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
-    // close on any click outside / scroll / resize
-    window.addEventListener('mousedown', (e) => {
+    // close on any press outside / scroll / resize (same function references
+    // are removed on cleanup, so no listeners leak between openings)
+    const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) close()
-    }, { once: true, capture: true })
-    window.addEventListener('wheel', close, { once: true, capture: true })
-    window.addEventListener('keydown', onKey, { once: true })
+    }
+    window.addEventListener('mousedown', onDown, { capture: true })
+    window.addEventListener('wheel', close, { capture: true })
+    window.addEventListener('resize', close)
+    window.addEventListener('keydown', onKey)
     return () => {
-      window.removeEventListener('mousedown', close, { capture: true })
+      window.removeEventListener('mousedown', onDown, { capture: true })
       window.removeEventListener('wheel', close, { capture: true })
+      window.removeEventListener('resize', close)
       window.removeEventListener('keydown', onKey)
     }
   }, [onClose])
@@ -92,10 +96,10 @@ export function CanvasContextMenu({ state, onClose }: { state: ContextMenuState;
     { label: 'Duplicate', icon: CopyPlus, kbd: 'Ctrl+D', onSelect: () => store.duplicateSelection() },
     ...(singleImage ? [{ label: 'Crop image', icon: Crop, onSelect: () => store.openCrop(singleImage.id) }] : []),
     Sep as unknown as Item,
-    { label: 'Bring to front', icon: BringToFront, onSelect: () => selectedIds.forEach((id) => store.moveLayer(id, 'front')) },
-    { label: 'Bring forward', icon: ArrowUpToLine, onSelect: () => selectedIds.forEach((id) => store.moveLayer(id, 'up')) },
-    { label: 'Send backward', icon: ArrowDownToLine, onSelect: () => selectedIds.forEach((id) => store.moveLayer(id, 'down')) },
-    { label: 'Send to back', icon: SendToBack, onSelect: () => selectedIds.forEach((id) => store.moveLayer(id, 'back')) },
+    { label: 'Bring to front', icon: BringToFront, onSelect: () => store.moveLayers(selectedIds, 'front') },
+    { label: 'Bring forward', icon: ArrowUpToLine, onSelect: () => store.moveLayers(selectedIds, 'up') },
+    { label: 'Send backward', icon: ArrowDownToLine, onSelect: () => store.moveLayers(selectedIds, 'down') },
+    { label: 'Send to back', icon: SendToBack, onSelect: () => store.moveLayers(selectedIds, 'back') },
     Sep as unknown as Item,
     { label: 'Group', icon: Group, kbd: 'Ctrl+G', disabled: !canGroup, onSelect: () => store.groupSelection() },
     { label: 'Ungroup', icon: Ungroup, kbd: 'Ctrl+Shift+G', disabled: !canUngroup, onSelect: () => store.ungroupSelection() },
@@ -106,7 +110,7 @@ export function CanvasContextMenu({ state, onClose }: { state: ContextMenuState;
   ]
 
   const pageItems: Item[] = [
-    { label: 'Paste', icon: ClipboardPaste, kbd: 'Ctrl+V', onSelect: () => store.pasteClipboard() },
+    { label: 'Paste', icon: ClipboardPaste, kbd: 'Ctrl+V', disabled: !hasClipboard(), onSelect: () => store.pasteClipboard() },
     { label: 'Select all', icon: MousePointerClick, kbd: 'Ctrl+A', onSelect: () => store.setSelection(store.pages[store.currentPage].elements.filter((e) => !e.locked).map((e) => e.id)) },
     ...(pageGuidesCount > 0
       ? [{ label: `Clear guides (${pageGuidesCount})`, icon: Ruler, onSelect: () => store.clearManualGuides() }]
@@ -114,17 +118,17 @@ export function CanvasContextMenu({ state, onClose }: { state: ContextMenuState;
     Sep as unknown as Item,
     { label: 'Add page', icon: FilePlus2, onSelect: () => store.addPage() },
     { label: 'Duplicate page', icon: SquareStack, onSelect: () => store.duplicatePage(store.currentPage) },
-    { label: 'Page background', icon: Palette, onSelect: () => store.setPanel('background') },
+    { label: 'Page background', icon: Palette, onSelect: () => { if (store.panel !== 'background') store.setPanel('background') } },
     Sep as unknown as Item,
-    { label: 'Delete page', icon: Trash2, kbd: 'DEL', danger: true, onSelect: () => store.deletePage(store.currentPage) },
+    { label: 'Delete page', icon: Trash2, danger: true, disabled: store.pages.length <= 1, onSelect: () => store.deletePage(store.currentPage) },
   ]
 
   const items = state.kind === 'element' ? elementItems : pageItems
 
   // clamp the menu inside the viewport
   const style: React.CSSProperties = {
-    left: Math.min(state.x, window.innerWidth - 250),
-    top: Math.min(state.y, window.innerHeight - 420),
+    left: Math.max(8, Math.min(state.x, window.innerWidth - 250)),
+    top: Math.max(8, Math.min(state.y, window.innerHeight - 420)),
   }
 
   return (
@@ -134,7 +138,7 @@ export function CanvasContextMenu({ state, onClose }: { state: ContextMenuState;
           <button
             key={i}
             role="menuitem"
-            className={`cv-menu-item ${item.danger ? 'cv-menu-item-danger' : ''}`}
+            className={`cv-menu-item disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent ${item.danger ? 'cv-menu-item-danger' : ''}`}
             disabled={item.disabled}
             onClick={() => {
               item.onSelect?.()

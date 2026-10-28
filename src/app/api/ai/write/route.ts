@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const completion = await zai.chat.completions.create({
       messages: [
         {
-          role: 'assistant',
+          role: 'system',
           content:
             'You are a senior brand copywriter for a design tool. Return EXACTLY 3 numbered options, one per line, ' +
             'no extra commentary, no quotes. Each option is ' +

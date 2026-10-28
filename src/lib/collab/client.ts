@@ -15,7 +15,8 @@ import type { Collaborator, CollabOp, CollabStatus, DesignEventRow, OpEnvelope, 
 export class CollabSession {
   readonly designId: string
   readonly pid: string
-  readonly name: string
+  /** display name — mutable so a rename reaches peers on the next heartbeat */
+  name: string
   readonly color: string
 
   status: CollabStatus = 'offline'
@@ -42,6 +43,13 @@ export class CollabSession {
     this.pid = pid
     this.name = name
     this.color = color
+  }
+
+  /** Update the broadcast display name and push it to peers right away. */
+  setName(name: string) {
+    if (!name || name === this.name) return
+    this.name = name
+    void this.heartbeat()
   }
 
   // ── lifecycle ─────────────────────────────────────────────

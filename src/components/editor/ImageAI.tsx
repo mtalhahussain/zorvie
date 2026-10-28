@@ -8,6 +8,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/hooks/use-toast'
+import { useAICapabilities } from '@/hooks/use-ai-capabilities'
+
+const AI_OFF_TITLE = 'AI not configured'
+const AI_OFF_DESC = 'This tool needs an AI provider on the server (set ZAI_BASE_URL and ZAI_API_KEY). BG Remover still works offline.'
 
 interface EditResponse {
   dataUrl?: string
@@ -50,7 +54,7 @@ async function runImageAI(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image, naturalWidth: el.naturalWidth, naturalHeight: el.naturalHeight, ...payload }),
     })
-    const data = (await res.json()) as EditResponse
+    const data = (await res.json().catch(() => ({}))) as EditResponse
     if (!res.ok || !data.dataUrl) {
       onDone(data.error ?? 'The edit failed. Please try again.')
       return false
@@ -152,9 +156,15 @@ export function MagicEraserPopover({ el }: { el: ImageElement }) {
   const [target, setTarget] = useState('')
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(false)
+  const ai = useAICapabilities()
+  const aiOff = ai.loaded && !ai.configured
 
   const run = async () => {
-    if (!target.trim()) return
+    if (!target.trim() || busy) return
+    if (aiOff) {
+      toast({ title: AI_OFF_TITLE, description: AI_OFF_DESC, variant: 'destructive' })
+      return
+    }
     setBusy(true)
     const ok = await runImageAI(el, { mode: 'erase', eraseTarget: target.trim() }, (msg) =>
       toast({ title: 'Magic eraser', description: msg, variant: 'destructive' })
@@ -170,7 +180,7 @@ export function MagicEraserPopover({ el }: { el: ImageElement }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className={btnBase} data-active={open} title="Magic eraser — remove unwanted objects" aria-label="Magic eraser">
+        <button className={btnBase} data-active={open} title={aiOff ? `Magic eraser — ${AI_OFF_TITLE}` : 'Magic eraser — remove unwanted objects'} aria-label="Magic eraser" data-dim={aiOff ? 'true' : undefined}>
           <Sparkles size={14} />
           <span className="text-[12px] hidden lg:inline">Magic eraser</span>
         </button>
@@ -183,17 +193,22 @@ export function MagicEraserPopover({ el }: { el: ImageElement }) {
           Remove an unwanted object from this photo. Describe it — e.g. &quot;the person in the
           background&quot; or &quot;the trash can on the left&quot;.
         </p>
+        {aiOff && (
+          <p className="text-[11px] text-[#FFB020] mb-2.5 leading-snug" role="status">
+            {AI_OFF_TITLE} — {AI_OFF_DESC}
+          </p>
+        )}
         <div className="flex gap-1.5">
           <Input
             value={target}
             onChange={(e) => setTarget(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !busy && void run()}
+            onKeyDown={(e) => { if (e.key === 'Enter') void run() }}
             placeholder="What should disappear?"
-            className="h-9 bg-white/5 border-white/10 text-white text-[12px]"
+            className="h-9 bg-white/5 border-white/10 text-white text-[12px] placeholder:text-white/40"
             aria-label="Object to remove"
             maxLength={200}
           />
-          <Button className="btn-cv h-9 px-3 shrink-0 text-[12px]" onClick={() => void run()} disabled={busy || !target.trim()}>
+          <Button className="btn-cv h-9 px-3 shrink-0 text-[12px]" onClick={() => void run()} disabled={busy || aiOff || !target.trim()}>
             {busy ? <Loader2 size={13} className="animate-spin" /> : 'Erase'}
           </Button>
         </div>
@@ -205,7 +220,14 @@ export function MagicEraserPopover({ el }: { el: ImageElement }) {
 /** Canva "Image Upscaler / enhancer" — one-click AI photo enhance. */
 export function EnhanceButton({ el }: { el: ImageElement }) {
   const [busy, setBusy] = useState(false)
+  const ai = useAICapabilities()
+  const aiOff = ai.loaded && !ai.configured
   const run = async () => {
+    if (busy) return
+    if (aiOff) {
+      toast({ title: AI_OFF_TITLE, description: AI_OFF_DESC, variant: 'destructive' })
+      return
+    }
     setBusy(true)
     const ok = await runImageAI(el, { mode: 'enhance' }, (msg) =>
       toast({ title: 'Enhance image', description: msg, variant: 'destructive' })
@@ -214,7 +236,7 @@ export function EnhanceButton({ el }: { el: ImageElement }) {
     if (ok) toast({ title: 'Image enhanced', description: 'Sharper, cleaner photo swapped in. Ctrl+Z to undo.' })
   }
   return (
-    <button className={btnBase} onClick={() => void run()} disabled={busy} title="Enhance image — sharpen & clean up with AI" aria-label="Enhance image">
+    <button className={btnBase} onClick={() => void run()} disabled={busy} title={aiOff ? `Enhance image — ${AI_OFF_TITLE}` : 'Enhance image — sharpen & clean up with AI'} aria-label="Enhance image" data-dim={aiOff ? 'true' : undefined}>
       {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
       <span className="text-[12px] hidden lg:inline">{busy ? 'Enhancing…' : 'Enhance'}</span>
     </button>

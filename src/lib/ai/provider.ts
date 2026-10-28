@@ -69,7 +69,12 @@ export async function getZAI(): Promise<import('z-ai-web-dev-sdk').default | nul
   if (!cfg) return null
   try {
     const { default: ZAI } = await import('z-ai-web-dev-sdk')
-    return await ZAI.create()
+    // ZAI.create() only reads the .z-ai-config file, so env-only setups
+    // (ZAI_BASE_URL + ZAI_API_KEY in .env) would fail there. The constructor
+    // is private in the typings but public at runtime — build the client from
+    // the already-resolved config so both sources work.
+    const Ctor = ZAI as unknown as new (config: AIProviderConfig) => import('z-ai-web-dev-sdk').default
+    return new Ctor(cfg)
   } catch (err) {
     console.error('[ai] provider initialization failed', err)
     return null
@@ -134,7 +139,7 @@ export async function recordUsage(feature: string, provider: 'zai' | 'local', ok
 // ── shared error responses ──
 
 export const NO_PROVIDER_RESPONSE = {
-  error: 'This feature requires an AI provider configured on the server.',
+  error: 'AI is not configured on this server — add ZAI_API_KEY and ZAI_BASE_URL to .env and restart.',
   code: 'NO_PROVIDER',
 } as const
 
@@ -150,6 +155,8 @@ export async function withProvider(
   limits: { limit: number; windowSec: number },
   fn: (zai: NonNullable<Awaited<ReturnType<typeof getZAI>>>) => Promise<NextResponse>
 ): Promise<NextResponse> {
+  // unconfigured → answer 503 straight away (never rate-limit a request that cannot run)
+  if (!hasProvider()) return providerUnavailable(NextResponse.json({}))
   const rl = rateLimit(feature, req, limits.limit, limits.windowSec)
   if (!rl.ok) {
     return NextResponse.json(

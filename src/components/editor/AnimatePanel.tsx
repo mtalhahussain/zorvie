@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Sparkles, X, Zap, Play, RotateCcw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Sparkles, X, Zap, Play, RotateCcw, RotateCw, ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { ANIMATION_KINDS, TRANSITION_KINDS } from '@/lib/animations'
 import type { AnimationDirection, AnimationEasing, AnimationKind, AnimationSpeed, ElementAnimation, PageTransition } from '@/lib/types'
@@ -18,12 +18,24 @@ const EASINGS: { id: AnimationEasing; label: string }[] = [
   { id: 'spring', label: 'Spring' },
 ]
 
+// direction = the side the element / page enters FROM (engine + preview + video agree)
 const DIRECTIONS: { id: AnimationDirection; label: string; icon: typeof ArrowLeft }[] = [
-  { id: 'left', label: 'From left', icon: ArrowLeft },
-  { id: 'right', label: 'From right', icon: ArrowRight },
+  { id: 'left', label: 'From left', icon: ArrowRight },
+  { id: 'right', label: 'From right', icon: ArrowLeft },
   { id: 'up', label: 'From bottom', icon: ArrowUp },
   { id: 'down', label: 'From top', icon: ArrowDown },
 ]
+
+// rotate only spins two ways (engine: left = −90° → 0, right = +90° → 0)
+const ROTATE_DIRECTIONS: { id: AnimationDirection; label: string; icon: typeof ArrowLeft }[] = [
+  { id: 'left', label: 'Spin clockwise', icon: RotateCw },
+  { id: 'right', label: 'Spin counter-clockwise', icon: RotateCcw },
+]
+
+/** the direction the engine uses when none is stored */
+function defaultDirection(kind: AnimationKind): AnimationDirection {
+  return kind === 'wipe' ? 'left' : kind === 'rotate' ? 'right' : 'up'
+}
 
 /**
  * Animate panel (canva-style side panel) — tabs: Page / Element.
@@ -70,6 +82,21 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
     if (!selection || !selectedAnim) return
     setElementAnimation(selectedIds, { ...selectedAnim, ...patch })
   }
+
+  // sliders: one undo snapshot per drag (pushed on the first change), then live updates
+  const liveRef = useRef(false)
+  const endLive = () => { liveRef.current = false }
+  const startLive = () => {
+    if (liveRef.current) return
+    useEditorStore.getState().pushHistory()
+    liveRef.current = true
+  }
+  const patchAnimLive = (patch: Partial<ElementAnimation>) => {
+    if (!selection || !selectedAnim) return
+    startLive()
+    setElementAnimation(selectedIds, { ...selectedAnim, ...patch }, { history: false })
+  }
+  const sliderGesture = { onPointerDown: endLive, onPointerUp: endLive, onKeyUp: endLive, onBlur: endLive }
 
   const applyTransition = (kind: PageTransition['kind']) => {
     if (kind === 'none') {
@@ -126,6 +153,10 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
             <button
               className="w-full rounded-xl bg-gradient-to-r from-[#00C4CC] to-[#7630D7] p-[1px] cursor-pointer group"
               onClick={() => {
+                if (!page || page.elements.length === 0) {
+                  toast({ title: 'Nothing to animate', description: 'Add some elements to this page first.' })
+                  return
+                }
                 magicAnimateCurrentPage(speed)
                 toast({ title: 'Magic Animate applied', description: 'Every element got a fitting animation. Preview to see it play.' })
               }}
@@ -204,9 +235,11 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                     max={2.5}
                     step={0.1}
                     value={pageTransition.duration}
-                    onChange={(e) =>
-                      setPageTransition({ ...pageTransition, duration: Number(e.target.value) })
-                    }
+                    onChange={(e) => {
+                      startLive()
+                      setPageTransition({ ...pageTransition, duration: Number(e.target.value) }, { history: false })
+                    }}
+                    {...sliderGesture}
                     className="w-full accent-[#02C0CC]"
                     aria-label="Transition duration"
                   />
@@ -216,6 +249,7 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                         <button
                           key={d.id}
                           title={d.label}
+                          aria-label={d.label}
                           onClick={() => setPageTransition({ ...pageTransition, direction: d.id })}
                           className={cn(
                             'flex-1 rounded-md border py-1.5 flex items-center justify-center cursor-pointer',
@@ -246,7 +280,10 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                 size="sm"
                 variant="ghost"
                 className="text-white/70 hover:bg-white/10 hover:text-white gap-1.5"
-                onClick={() => clearPageAnimations()}
+                onClick={() => {
+                  clearPageAnimations()
+                  toast({ title: 'Animations cleared', description: 'Removed element animations and the page transition.' })
+                }}
                 title="Remove all animations from this page"
               >
                 <RotateCcw size={12} /> Clear
@@ -305,7 +342,8 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                         max={4}
                         step={0.1}
                         value={selectedAnim.duration}
-                        onChange={(e) => patchAnim({ duration: Number(e.target.value) })}
+                        onChange={(e) => patchAnimLive({ duration: Number(e.target.value) })}
+                        {...sliderGesture}
                         className="w-full accent-[#02C0CC]"
                         aria-label="Animation duration"
                       />
@@ -321,7 +359,8 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                         max={5}
                         step={0.1}
                         value={selectedAnim.delay}
-                        onChange={(e) => patchAnim({ delay: Number(e.target.value) })}
+                        onChange={(e) => patchAnimLive({ delay: Number(e.target.value) })}
+                        {...sliderGesture}
                         className="w-full accent-[#02C0CC]"
                         aria-label="Animation delay"
                       />
@@ -349,14 +388,15 @@ export function AnimatePanel({ onClose }: { onClose: () => void }) {
                       <div>
                         <span className="text-[10px] font-semibold text-white/50 block mb-1.5">Direction</span>
                         <div className="flex gap-1">
-                          {DIRECTIONS.map((d) => (
+                          {(selectedAnim.kind === 'rotate' ? ROTATE_DIRECTIONS : DIRECTIONS).map((d) => (
                             <button
                               key={d.id}
                               title={d.label}
+                              aria-label={d.label}
                               onClick={() => patchAnim({ direction: d.id })}
                               className={cn(
                                 'flex-1 rounded-md border py-1.5 flex items-center justify-center cursor-pointer',
-                                (selectedAnim.direction ?? 'up') === d.id
+                                (selectedAnim.direction ?? defaultDirection(selectedAnim.kind)) === d.id
                                   ? 'border-[#02C0CC] bg-[#02C0CC]/10 text-white'
                                   : 'border-white/10 text-white/50 hover:border-white/25'
                               )}

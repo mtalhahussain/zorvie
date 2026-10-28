@@ -59,7 +59,11 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 
   /** Magic Switch: create a resized COPY for every checked channel. */
   const copyAndResize = async () => {
-    if (!selected.length || !designId) return
+    if (!selected.length) return
+    if (!designId) {
+      toast({ title: 'Save the design first', description: 'Copies can only be made from a saved design.', variant: 'destructive' })
+      return
+    }
     setBusy(true)
     let made = 0
     try {
@@ -78,9 +82,13 @@ export function ResizeDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           // keep going — partial success is better than aborting
         }
       }
+      const failed = selected.length - made
       toast({
         title: made ? `Created ${made} resized cop${made === 1 ? 'y' : 'ies'}` : 'Could not create copies',
-        description: made ? 'Find them in your recent designs.' : 'Please try again.',
+        description: made
+          ? `Find them in your recent designs.${failed ? ` ${failed} size${failed === 1 ? '' : 's'} failed — try again.` : ''}`
+          : 'Please try again.',
+        ...(made ? {} : { variant: 'destructive' as const }),
       })
       if (made) goDashboard()
       onOpenChange(false)

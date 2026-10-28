@@ -59,7 +59,6 @@ function ChartRow({ icon: Icon, name, desc, onAdd }: { icon: typeof BarChart3; n
 
 function addBarChart() {
   const store = useEditorStore.getState()
-  store.pushHistory()
   const W = 700, H = 420, padL = 40, padB = 46, padT = 20
   const max = Math.max(...DATA)
   const n = DATA.length
@@ -78,13 +77,13 @@ function addBarChart() {
     // label
     els.push(createTextElement({ x: Math.round(bx), y: y + H - padB + 10, width: Math.round(barW), text: `Q${i + 1}`, fontSize: 22, fill: '#6B7280', align: 'center' }))
   })
-  els.forEach((el) => store.addElement(el))
+  // one bulk insert = one undo step for the whole chart
+  store.addElementsBulk(els)
   toast({ title: 'Bar chart added — edit any bar like a shape' })
 }
 
 function addLineChart() {
   const store = useEditorStore.getState()
-  store.pushHistory()
   const W = 700, H = 380, padL = 30, padB = 40, padT = 20
   const max = Math.max(...DATA)
   const { x, y } = chartBase(W, H)
@@ -93,23 +92,27 @@ function addLineChart() {
     const py = padT + (1 - v / max) * (H - padB - padT)
     return { px: Math.round(px), py: Math.round(py) }
   })
+  const els: AnyElement[] = []
   pts.forEach((p, i) => {
     if (i === 0) return
     const a = pts[i - 1]
     const dx = p.px - a.px
     const dy = p.py - a.py
     const len = Math.round(Math.hypot(dx, dy))
-    const angle = Math.round((Math.atan2(dy, dx) * 180) / Math.PI)
-    store.addElement(createLineElement({ x: x + a.px, y: y + a.py, width: len, height: 0, rotation: angle, stroke: '#02C0CC', strokeWidth: 6 }))
-    // vertex dot
-    store.addElement(createShapeElement('ellipse', { x: x + p.px - 9, y: y + p.py - 9, width: 18, height: 18, fill: '#02C0CC' }))
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI
+    els.push(createLineElement({ x: x + a.px, y: y + a.py, width: len, height: 0, rotation: angle, stroke: '#02C0CC', strokeWidth: 6 }))
   })
+  // vertex dots on top of the segments (every point, including the first)
+  pts.forEach((p) => {
+    els.push(createShapeElement('ellipse', { x: x + p.px - 9, y: y + p.py - 9, width: 18, height: 18, fill: '#02C0CC' }))
+  })
+  store.addElementsBulk(els)
   toast({ title: 'Line chart added' })
 }
 
 function addDonut() {
   const store = useEditorStore.getState()
-  store.pushHistory()
+  const els: AnyElement[] = []
   const { x, y } = chartBase(320, 320)
   const segments = 12
   const filled = 8
@@ -118,23 +121,26 @@ function addDonut() {
     const a0 = (i / segments) * Math.PI * 2 - Math.PI / 2
     const chord = 2 * r * Math.sin(Math.PI / segments)
     const midA = a0 + Math.PI / segments
-    const len = Math.round(chord * 0.82)
-    const ang = Math.round((midA * 180) / Math.PI)
-    const px = cx + r * Math.cos(midA) - len / 2
-    const py = cy + r * Math.sin(midA)
-    store.addElement(
+    const len = Math.round(chord * 0.4)
+    // lines rotate around their start point → start half a segment back along
+    // the ring's tangent so each segment is centred on the circle
+    const tangent = midA + Math.PI / 2
+    const px = cx + r * Math.cos(midA) - (len / 2) * Math.cos(tangent)
+    const py = cy + r * Math.sin(midA) - (len / 2) * Math.sin(tangent)
+    els.push(
       createLineElement({
         x: Math.round(px),
         y: Math.round(py),
         width: len,
         height: 0,
-        rotation: ang,
-        stroke: i < filled ? '#7630D7' : '#2A2C35',
-        strokeWidth: 34,
+        rotation: (tangent * 180) / Math.PI,
+        stroke: i < filled ? '#7630D7' : '#E0E1E6',
+        strokeWidth: 30,
       })
     )
   }
-  // center label
-  store.addElement(createTextElement({ x: x + 60, y: y + 130, width: 200, text: '68%', fontSize: 64, bold: true, fill: '#FFFFFF', align: 'center' }))
+  // center label (dark so it stays readable on the default white page)
+  els.push(createTextElement({ x: x + 60, y: y + 120, width: 200, text: '67%', fontSize: 64, bold: true, fill: '#1F2226', align: 'center' }))
+  store.addElementsBulk(els)
   toast({ title: 'Donut chart added — tweak segments as lines' })
 }

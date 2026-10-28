@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /** canva-style tooltip: dark chip, ~600ms delay, fixed positioning. */
 export function Tip({
@@ -17,8 +17,13 @@ export function Tip({
   const [pos, setPos] = useState<{ x: number; y: number; tx?: string } | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+
   const show = (e: React.MouseEvent) => {
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    // the wrapper is `display: contents` (no box → zero rect), so measure the wrapped child
+    const host = e.currentTarget as HTMLElement
+    const r = ((host.firstElementChild as HTMLElement | null) ?? host).getBoundingClientRect()
+    if (timer.current) clearTimeout(timer.current)
     if (side === 'right') {
       const y = Math.max(8, Math.min(r.top + r.height / 2, window.innerHeight - 30))
       timer.current = setTimeout(() => setPos({ x: r.right + 10, y, tx: 'translateY(-50%)' }), delay)

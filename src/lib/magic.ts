@@ -2,7 +2,7 @@
 // Canvix "Magic" engine — pure functions for Magic Resize
 // (Canva Magic Switch: resize one design into many channels)
 // ─────────────────────────────────────────────────────────────
-import type { AnyElement, GroupElement, PageData, ImageElement } from './types'
+import type { AnyElement, FrameElement, GroupElement, PageData, ImageElement, TableElement } from './types'
 
 export interface ResizePreset {
   name: string
@@ -101,11 +101,23 @@ export function magicRelayoutElement<T extends AnyElement>(el: T, oldW: number, 
       next.height = Math.max(4, y2 - y1)
       break
     }
-    case 'image': {
-      // keep aspect from natural size after box scaling
-      const im = el as ImageElement
-      const ratio = im.naturalHeight / Math.max(1, im.naturalWidth)
-      next.height = Math.max(4, Math.round(next.width * ratio))
+    case 'image':
+    case 'frame': {
+      // the box already scales uniformly (aspect kept, crops/stretches preserved);
+      // only the corner clip needs scaling. Never derive height from naturalWidth/
+      // naturalHeight — they are 0 for empty frames / not-yet-loaded images.
+      const im = el as ImageElement | FrameElement
+      ;(next as ImageElement | FrameElement).radius = Math.max(0, Math.round((im.radius ?? 0) * s))
+      break
+    }
+    case 'table': {
+      // geometry is proportional to the box; scale the type & rules with it
+      const tb = el as TableElement
+      const scaled = next as TableElement
+      scaled.fontSize = Math.max(6, Math.round(tb.fontSize * s))
+      scaled.borderWidth = Math.max(0, Math.round(tb.borderWidth * s * 100) / 100)
+      scaled.colWidths = tb.colWidths.map((w) => Math.max(1, Math.round(w * s)))
+      scaled.rowHeight = Math.max(4, Math.round(tb.rowHeight * s))
       break
     }
     default:

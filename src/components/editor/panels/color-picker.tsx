@@ -16,6 +16,9 @@ interface ColorPickerProps {
 export function ColorPicker({ value, onChange, children, label }: ColorPickerProps) {
   const [open, setOpen] = useState(false)
   const startedRef = useRef(false)
+  /** hex text being typed — only complete colours are sent to onChange */
+  const [draft, setDraft] = useState<string | null>(null)
+  const isHex = (v: string) => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)
 
   const swatchClick = (color: string) => {
     onChange(color, true)
@@ -68,12 +71,21 @@ export function ColorPicker({ value, onChange, children, label }: ColorPickerPro
             aria-label="Custom color"
           />
           <Input
-            value={value}
+            value={draft ?? value}
             onChange={(e) => {
               const v = e.target.value
-              if (/^#[0-9a-fA-F]{0,6}$/.test(v)) onChange(v, false)
+              if (!/^#?[0-9a-fA-F]{0,6}$/.test(v)) return
+              const hex = v.startsWith('#') ? v : `#${v}`
+              setDraft(hex)
+              if (isHex(hex)) onChange(hex, false)
             }}
-            onBlur={(e) => onChange(e.target.value, true)}
+            onBlur={() => {
+              if (draft !== null && isHex(draft)) onChange(draft, true)
+              setDraft(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
             className="h-8 font-mono text-xs"
             aria-label="Hex color"
           />

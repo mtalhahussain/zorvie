@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import type Konva from 'konva'
 import { Download, Loader2, FileImage, FileType2, FileCode2, Film } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { captureStage, canvasBridge } from './canvas/canvas-bridge'
@@ -32,6 +33,41 @@ function triggerDownload(url: string, filename: string) {
   a.remove()
 }
 
+/**
+ * Capture the current page without editor chrome (selection transformer,
+ * snapping / ruler guides), optionally with a transparent background.
+ */
+async function captureClean(opts: Parameters<typeof captureStage>[0], transparent = false): Promise<string> {
+  const layer = canvasBridge.layer
+  const hidden: Konva.Node[] = []
+  const hide = (n: Konva.Node) => {
+    if (n.visible()) {
+      n.visible(false)
+      hidden.push(n)
+    }
+  }
+  if (layer) {
+    for (const child of layer.getChildren()) {
+      if (child.hasName('page-bg')) {
+        if (transparent) hide(child)
+        continue
+      }
+      // the elements group: keep design elements, hide everything else
+      const kids = 'getChildren' in child ? (child as Konva.Container).getChildren() : []
+      for (const k of kids) if (!k.hasName('cv-element')) hide(k)
+    }
+  }
+  try {
+    return await captureStage(opts)
+  } finally {
+    for (const n of hidden) n.visible(true)
+    layer?.batchDraw()
+  }
+}
+
+/** longest-edge cap for video at each quality step */
+const VIDEO_MAX_EDGE: Record<number, number> = { 1: 960, 2: 1440, 3: 1920 }
+
 const SCALES = [
   { id: 1, label: '1×', hint: 'Standard' },
   { id: 2, label: '2×', hint: 'High-res' },
@@ -57,6 +93,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const [format, setFormat] = useState<FormatId>('png')
   const [scale, setScale] = useState(2)
   const [allPages, setAllPages] = useState(false)
+  const [transparent, setTransparent] = useState(false)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<number | null>(null)
   const [progressLabel, setProgressLabel] = useState('')
@@ -67,6 +104,15 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const pageCount = allPages ? pages.length : 1
   const estWidth = canvasBridge.pageWidth * scale
   const estHeight = canvasBridge.pageHeight * scale
+  const videoScale = Math.min(1, VIDEO_MAX_EDGE[scale] / Math.max(canvasBridge.pageWidth || 1080, canvasBridge.pageHeight || 1080))
+  const videoWidth = Math.max(2, Math.round(((canvasBridge.pageWidth || 1080) * videoScale) / 2) * 2)
+  const videoHeight = Math.max(2, Math.round(((canvasBridge.pageHeight || 1080) * videoScale) / 2) * 2)
+  const supportsTransparency = format === 'png' || format === 'svg'
+  const useTransparent = supportsTransparency && transparent
+  const downloadLabel =
+    format === 'mp4'
+      ? `Download ${videoFormat ? videoFormat.extension.toUpperCase() : 'video'}`
+      : `Download ${pageCount} ${format.toUpperCase()}`
 
   const run = async () => {
     setBusy(true)
@@ -78,7 +124,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           designWidth: canvasBridge.pageWidth || 1080,
           designHeight: canvasBridge.pageHeight || 1080,
           pages,
-          maxWidth: scale === 3 ? 1920 : scale === 2 ? 1440 : 960,
+          maxWidth: VIDEO_MAX_EDGE[scale],
           onProgress: (ratio, label) => {
             setProgress(Math.round(ratio * 100))
             setProgressLabel(label)
@@ -94,7 +140,9 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       }
       if (format === 'svg') {
         // true vector export — no rasterization of vector elements
-        const svgs = exportDesignToSVGs(allPages ? pages : [pages[currentPage]], canvasBridge.pageWidth, canvasBridge.pageHeight)
+        const svgs = exportDesignToSVGs(allPages ? pages : [pages[currentPage]], canvasBridge.pageWidth, canvasBridge.pageHeight, {
+          transparent: useTransparent,
+        })
         for (let k = 0; k < svgs.length; k++) {
           const suffix = svgs.length > 1 ? `-page-${(allPages ? 0 : currentPage) + k + 1}` : ''
           downloadSVG(svgs[k], `${base}${suffix}.svg`)
@@ -122,7 +170,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             setCurrentPage(idx)
             await new Promise((r) => setTimeout(r, 260))
           }
-          const url = await captureStage({ pixelScale: scale, mimeType: 'image/jpeg', quality: 0.95 })
+          const url = await captureClean({ pixelScale: scale, mimeType: 'image/jpeg', quality: 0.95 })
           if (k > 0) pdf.addPage([pw, ph], orientation)
           pdf.addImage(url, 'JPEG', 0, 0, pw, ph)
         }
@@ -142,7 +190,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           // wait for the stage to re-render the page
           await new Promise((r) => setTimeout(r, 220))
         }
-        const url = await captureStage({ pixelScale: scale, mimeType, quality: 0.94 })
+        const url = await captureClean({ pixelScale: scale, mimeType, quality: 0.94 }, useTransparent)
         const suffix = indices.length > 1 ? `-page-${idx + 1}` : ''
         triggerDownload(url, `${base}${suffix}.${format}`)
         if (indices.length > 1) await new Promise((r) => setTimeout(r, 380))
@@ -152,7 +200,11 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       onOpenChange(false)
     } catch (err) {
       console.error('Export failed', err)
-      toast({ title: 'Export failed', variant: 'destructive' })
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Something went wrong while generating the file.',
+        variant: 'destructive',
+      })
     } finally {
       setBusy(false)
     }
@@ -213,7 +265,8 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                   · rendered locally (no upload)
                 </p>
               </div>
-            ) : (
+            ) : null}
+            {format !== 'svg' && (
               <>
             <div className="grid grid-cols-3 gap-2">
               {SCALES.map((s) => (
@@ -231,11 +284,21 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               ))}
             </div>
             <p className="text-[11px] text-muted-foreground mt-2">
-              Output: {estWidth} × {estHeight} px per file
+              {format === 'mp4' ? <>Output: {videoWidth} × {videoHeight} px video</> : <>Output: {estWidth} × {estHeight} px per file</>}
             </p>
               </>
             )}
           </div>
+
+          {supportsTransparency && (
+            <label className="flex items-center justify-between rounded-xl border border-black/10 px-4 py-3 cursor-pointer">
+              <span className="text-sm font-medium">
+                Transparent background
+                <span className="block text-[11px] text-muted-foreground font-normal">Leave out the page background colour</span>
+              </span>
+              <input type="checkbox" checked={transparent} onChange={(e) => setTransparent(e.target.checked)} className="accent-[#00C4CC] h-4 w-4" />
+            </label>
+          )}
 
           {pages.length > 1 && format !== 'mp4' && (
             <label className="flex items-center justify-between rounded-xl border border-black/10 px-4 py-3 cursor-pointer">
@@ -259,9 +322,9 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
-          <Button className="btn-brand-gradient gap-2 px-6" onClick={run} disabled={busy}>
+          <Button className="btn-brand-gradient gap-2 px-6" onClick={run} disabled={busy || (format === 'mp4' && !videoFormat)}>
             {busy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-            {busy ? 'Exporting…' : `Download ${pageCount} ${format.toUpperCase()}`}
+            {busy ? 'Exporting…' : downloadLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

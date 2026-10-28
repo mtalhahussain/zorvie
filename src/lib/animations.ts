@@ -104,14 +104,13 @@ export function animateElementAt(
     case 'fade':
       return { ...IDENTITY, opacity: p }
     case 'rise': {
-      // rise = move up + fade in (direction-aware)
-      const dy = dir === 'down' ? inv * travel.y : -inv * travel.y
-      return { ...IDENTITY, opacity: p, dy }
+      // rise = travel in from the chosen side + fade in (default: up from below)
+      const off = entryOffset(dir, travel)
+      return { ...IDENTITY, opacity: p, dx: inv * off.dx, dy: inv * off.dy }
     }
     case 'pan': {
-      const dx = dir === 'left' ? -inv * travel.x : dir === 'right' ? inv * travel.x : 0
-      const dy2 = dir === 'up' ? -inv * travel.y : dir === 'down' ? inv * travel.y : 0
-      return { ...IDENTITY, dx, dy: dy2 }
+      const off = entryOffset(dir, travel)
+      return { ...IDENTITY, dx: inv * off.dx, dy: inv * off.dy }
     }
     case 'pop': {
       // overshoot springy scale-in
@@ -127,10 +126,30 @@ export function animateElementAt(
       return { ...IDENTITY, scaleX: s, scaleY: s, opacity: p }
     }
     case 'rotate': {
-      return { ...IDENTITY, rotation: inv * (dir === 'left' ? -90 : 90), opacity: p, scaleX: Math.max(0.1, 0.8 + 0.2 * p) }
+      const s = Math.max(0.1, 0.8 + 0.2 * p)
+      return { ...IDENTITY, rotation: inv * (dir === 'left' ? -90 : 90), opacity: p, scaleX: s, scaleY: s }
     }
     default:
       return IDENTITY
+  }
+}
+
+/**
+ * Start offset for directional entries. Direction names the side the element
+ * comes FROM, matching the panel labels: left = from left, right = from right,
+ * up = from bottom (moves up), down = from top (moves down).
+ */
+function entryOffset(dir: ElementAnimation['direction'], travel: { x: number; y: number }): { dx: number; dy: number } {
+  switch (dir) {
+    case 'left':
+      return { dx: -travel.x, dy: 0 }
+    case 'right':
+      return { dx: travel.x, dy: 0 }
+    case 'down':
+      return { dx: 0, dy: -travel.y }
+    case 'up':
+    default:
+      return { dx: 0, dy: travel.y }
   }
 }
 
@@ -148,12 +167,10 @@ function startState(
     case 'pop':
     case 'rotate':
       return { ...IDENTITY, opacity: 0 }
-    case 'pan':
-      return {
-        ...IDENTITY,
-        dx: dir === 'left' ? -travel.x : dir === 'right' ? travel.x : 0,
-        dy: dir === 'up' ? -travel.y : dir === 'down' ? travel.y : 0,
-      }
+    case 'pan': {
+      const off = entryOffset(dir, travel)
+      return { ...IDENTITY, dx: off.dx, dy: off.dy }
+    }
     case 'wipe':
       return { ...IDENTITY, reveal: 0 }
     case 'breathe':
@@ -198,11 +215,16 @@ const HEADING_FONT_RATIO = 0.06 // fontSize > 6% of page height = heading
  *   - page transition → fade
  * Elements keep relative order: delay scales with stacking order.
  */
-export function magicAnimatePage(page: PageData, pageHeight: number, speed: 'slow' | 'medium' | 'fast' = 'medium'): PageData {
+export function magicAnimatePage(
+  page: PageData,
+  pageHeight: number,
+  speed: 'slow' | 'medium' | 'fast' = 'medium',
+  pageWidth = 1080
+): PageData {
   const base = speed === 'slow' ? 1.25 : speed === 'fast' ? 0.7 : 1
   let delayCursor = 0
   const elements = page.elements.map((el) => {
-    const anim = magicAnimationFor(el, pageHeight, base, delayCursor)
+    const anim = magicAnimationFor(el, pageHeight, pageWidth, base, delayCursor)
     if (anim) delayCursor = Math.min(delayCursor + 0.12 * base, 1.4)
     return anim ? { ...el, animation: anim } : { ...el, animation: undefined }
   })
@@ -216,11 +238,12 @@ export function magicAnimatePage(page: PageData, pageHeight: number, speed: 'slo
 function magicAnimationFor(
   el: AnyElement,
   pageHeight: number,
+  pageWidth: number,
   base: number,
   delay: number
 ): ElementAnimation | undefined {
   const duration = 0.8 * base
-  const direction = pickDirection(el)
+  const direction = pickDirection(el, pageWidth)
 
   if (el.type === 'text') {
     const isHeading = el.fontSize / pageHeight > HEADING_FONT_RATIO || el.bold
@@ -244,13 +267,13 @@ function magicAnimationFor(
   return { kind: 'fade', duration, delay: Math.min(delay, 1.2 * base), easing: 'easeOut' }
 }
 
-function pickDirection(el: { x: number; y: number; width: number; height: number }): 'left' | 'right' | 'up' | 'down' {
-  // pan in from the nearest edge of the element
+function pickDirection(el: { x: number; y: number; width: number; height: number }, pageWidth: number): 'left' | 'right' | 'down' {
+  // pan in from the nearest edge of the element (direction = side it comes from)
   const distLeft = el.x
-  const distRight = Math.abs(1080 - (el.x + el.width)) // page width unknown here; approximate
+  const distRight = Math.abs(pageWidth - (el.x + el.width))
   const distTop = el.y
   const min = Math.min(distLeft, distTop, distRight)
-  if (min === distTop) return 'up'
+  if (min === distTop) return 'down' // 'down' = enters from the top
   if (min === distLeft) return 'left'
   return 'right'
 }
@@ -304,4 +327,143 @@ export function sanitizeAnimation(input: unknown): ElementAnimation | undefined 
     easing,
     direction,
   }
+}
+
+// ── applying a state to a scene-graph node (Konva-compatible) ──
+//
+// Structural types only, so this module stays independent from Konva.
+// Shared by the preview stage and the video exporter so both play the
+// exact same motion: scale/rotation pivot on the element's centre, and
+// wipes grow from the edge the element is revealed from.
+
+interface NumAttr {
+  (): number
+  (v: number): unknown
+}
+
+export interface AnimatableNode {
+  x: NumAttr
+  y: NumAttr
+  opacity: NumAttr
+  rotation: NumAttr
+  scaleX: NumAttr
+  scaleY: NumAttr
+  offsetX: NumAttr
+  offsetY: NumAttr
+  getClientRect(config?: { skipTransform?: boolean; skipShadow?: boolean; skipStroke?: boolean }): {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+}
+
+/** a node's resting attributes + its local (untransformed) bounding box */
+export interface AnimationNodeBase {
+  x: number
+  y: number
+  opacity: number
+  rotation: number
+  scaleX: number
+  scaleY: number
+  offsetX: number
+  offsetY: number
+  box: { x: number; y: number; width: number; height: number }
+}
+
+export function captureAnimationBase(node: AnimatableNode, fallback: { width: number; height: number }): AnimationNodeBase {
+  let box = { x: 0, y: 0, width: fallback.width, height: fallback.height }
+  try {
+    const r = node.getClientRect({ skipTransform: true, skipShadow: true, skipStroke: true })
+    if (Number.isFinite(r.width) && Number.isFinite(r.height) && (r.width > 0 || r.height > 0)) box = r
+  } catch {
+    /* keep the element-size fallback */
+  }
+  return {
+    x: node.x(),
+    y: node.y(),
+    opacity: node.opacity(),
+    rotation: node.rotation(),
+    scaleX: node.scaleX(),
+    scaleY: node.scaleY(),
+    offsetX: node.offsetX(),
+    offsetY: node.offsetY(),
+    box,
+  }
+}
+
+/** node-local point → parent space (Konva order: translate · rotate · scale · −offset) */
+function localToParent(
+  lx: number,
+  ly: number,
+  t: { x: number; y: number; rotation: number; scaleX: number; scaleY: number; offsetX: number; offsetY: number }
+): { x: number; y: number } {
+  const px = (lx - t.offsetX) * t.scaleX
+  const py = (ly - t.offsetY) * t.scaleY
+  const rad = (t.rotation * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  return { x: t.x + px * cos - py * sin, y: t.y + px * sin + py * cos }
+}
+
+/** Apply an animated state to a node, relative to its captured base. */
+export function applyAnimationState(
+  node: AnimatableNode,
+  base: AnimationNodeBase,
+  state: AnimatedElementState,
+  direction: ElementAnimation['direction']
+): void {
+  const b = base.box
+  let sx = base.scaleX * state.scaleX
+  let sy = base.scaleY * state.scaleY
+  // pivot: element centre, or the anchor edge for a wipe
+  let ax = b.x + b.width / 2
+  let ay = b.y + b.height / 2
+  if (state.reveal < 1) {
+    const r = Math.max(0.001, state.reveal)
+    switch (direction) {
+      case 'right':
+        ax = b.x + b.width
+        sx *= r
+        break
+      case 'up': // from bottom
+        ay = b.y + b.height
+        sy *= r
+        break
+      case 'down': // from top
+        ay = b.y
+        sy *= r
+        break
+      case 'left':
+      default:
+        ax = b.x
+        sx *= r
+    }
+  }
+  const rotation = base.rotation + state.rotation
+  const pivot = localToParent(ax, ay, base)
+  const rel = localToParent(ax, ay, { x: 0, y: 0, rotation, scaleX: sx, scaleY: sy, offsetX: base.offsetX, offsetY: base.offsetY })
+  node.opacity(base.opacity * Math.min(1, Math.max(0, state.opacity)))
+  node.rotation(rotation)
+  node.scaleX(sx)
+  node.scaleY(sy)
+  node.x(pivot.x + state.dx - rel.x)
+  node.y(pivot.y + state.dy - rel.y)
+}
+
+/** Restore a node to its captured resting attributes. */
+export function restoreAnimationBase(node: AnimatableNode, base: AnimationNodeBase): void {
+  node.opacity(base.opacity)
+  node.x(base.x)
+  node.y(base.y)
+  node.rotation(base.rotation)
+  node.scaleX(base.scaleX)
+  node.scaleY(base.scaleY)
+  node.offsetX(base.offsetX)
+  node.offsetY(base.offsetY)
+}
+
+/** true when a page has a looping (breathe) animation that never "finishes" */
+export function pageHasLoopingAnimation(page: PageData): boolean {
+  return page.elements.some((el) => el.animation?.kind === 'breathe')
 }

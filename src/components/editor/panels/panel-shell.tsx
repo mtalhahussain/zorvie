@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { Search, Sparkles, Mic, X } from 'lucide-react'
+import { Search, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface PanelShellProps {
@@ -10,6 +10,8 @@ interface PanelShellProps {
   /** canva-style AI prompt + Generate/Search row */
   searchPlaceholder?: string
   onSearch?: (q: string) => void
+  /** optional AI "Generate" action shown next to Search (hidden when absent) */
+  onGenerate?: (q: string) => void
   children: ReactNode
   /** extra row under the search bar (e.g. filter chips) */
   belowSearch?: ReactNode
@@ -17,7 +19,7 @@ interface PanelShellProps {
 }
 
 /** Dark side-panel shell matching canva.com 2026: header, AI prompt row, purple Search button. */
-export function PanelShell({ title, subtitle, searchPlaceholder, onSearch, children, belowSearch, onClose }: PanelShellProps) {
+export function PanelShell({ title, subtitle, searchPlaceholder, onSearch, onGenerate, children, belowSearch, onClose }: PanelShellProps) {
   const [q, setQ] = useState('')
   const submit = () => onSearch?.(q.trim())
 
@@ -47,22 +49,28 @@ export function PanelShell({ title, subtitle, searchPlaceholder, onSearch, child
               className="flex-1 min-w-0 bg-transparent outline-none text-[13px] placeholder:text-white/35"
               aria-label={`${title} search`}
             />
-            <button className="w-6 h-6 rounded-full flex items-center justify-center text-white/40 hover:text-white shrink-0" aria-label="Describe with AI" title="Describe with AI">
-              <Mic size={13} />
-            </button>
           </div>
 
-          {/* canva AI row: Generate (split-radius) + purple Search */}
+          {/* canva AI row: optional Generate (split-radius) + purple Search */}
           <div className="flex gap-2 mt-2">
+            {onGenerate && (
+              <button
+                className="flex-1 h-10 rounded-l-xl rounded-r-none border border-white/12 bg-white/[0.05] hover:bg-white/10 text-[13px] font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                onClick={() => onGenerate(q.trim())}
+                aria-label="Generate with AI"
+                title="Generate with AI"
+              >
+                <Sparkles size={14} className="text-[#02C0CC]" /> Generate
+              </button>
+            )}
             <button
-              className="flex-1 h-10 rounded-l-xl rounded-r-none border border-white/12 bg-white/[0.05] hover:bg-white/10 text-[13px] font-semibold flex items-center justify-center gap-1.5 transition-colors"
+              className={cn(
+                'h-10 bg-[#7630D7] hover:bg-[#8B5CF6] text-white text-[13px] font-semibold transition-colors',
+                onGenerate ? 'w-[104px] rounded-r-xl rounded-l-none' : 'flex-1 rounded-xl'
+              )}
               onClick={submit}
-              aria-label="Generate with AI"
-              title="Generate with AI (open-source roadmap)"
+              aria-label="Search"
             >
-              <Sparkles size={14} className="text-[#02C0CC]" /> Generate
-            </button>
-            <button className="w-[104px] h-10 rounded-r-xl rounded-l-none bg-[#7630D7] hover:bg-[#8B5CF6] text-white text-[13px] font-semibold transition-colors" onClick={submit} aria-label="Search">
               Search
             </button>
           </div>

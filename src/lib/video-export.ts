@@ -12,8 +12,16 @@
 // ─────────────────────────────────────────────────────────────
 
 import Konva from 'konva'
-import type { AnyElement, ImageElement, PageData } from '@/lib/types'
-import { animateElementAt, pageHoldDuration } from '@/lib/animations'
+import type { AnyElement, EmbedElement, FrameElement, ImageElement, PageData, TableElement } from '@/lib/types'
+import { withAlpha } from '@/lib/types'
+import {
+  animateElementAt,
+  applyAnimationState,
+  captureAnimationBase,
+  pageHoldDuration,
+  type AnimationNodeBase,
+} from '@/lib/animations'
+import { arcForCurve, embedLayout, frameClipPathD, hostOf, tableGeometry } from '@/lib/v06-geometry'
 
 export interface VideoExportOptions {
   designWidth: number
@@ -98,6 +106,7 @@ async function collectImages(pages: PageData[]): Promise<Map<string, HTMLImageEl
   const walk = (els: AnyElement[]) => {
     for (const el of els) {
       if (el.type === 'image') sources.push(el.src)
+      else if (el.type === 'frame' && el.src) sources.push(el.src)
       else if (el.type === 'group') walk(el.children)
     }
   }
@@ -118,6 +127,21 @@ function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): 
   switch (el.type) {
     case 'text': {
       const t = el
+      const arc = arcForCurve(t.curve ?? 0, t.width)
+      if (arc) {
+        return new Konva.TextPath({
+          id: t.id,
+          x: t.x,
+          y: t.y,
+          data: arc.data,
+          text: t.uppercase ? t.text.toUpperCase() : t.text,
+          fontSize: t.fontSize,
+          fontFamily: t.fontFamily,
+          fontStyle: `${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`,
+          fill: t.fill,
+          letterSpacing: t.letterSpacing,
+        })
+      }
       return new Konva.Text({
         id: t.id,
         x: t.x,
@@ -207,10 +231,10 @@ function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): 
         data: s.pathData ?? '',
         fill: s.fillGradient ? undefined : s.fill,
         stroke: s.stroke,
-        strokeWidth: s.strokeWidth,
+        strokeWidth: s.strokeWidth / Math.max(0.01, s.width / 100),
+        scaleX: s.width / 100,
+        scaleY: s.height / 100,
       })
-      node.scaleX(s.width / 100)
-      node.scaleY(s.height / 100)
       return node
     }
     case 'line': {
@@ -269,9 +293,19 @@ function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): 
         height: im.height,
         image: images.get(im.src) ?? undefined,
         cornerRadius: im.radius,
+        scaleX: im.flipH ? -1 : 1,
+        scaleY: im.flipV ? -1 : 1,
+        offsetX: im.flipH ? im.width : 0,
+        offsetY: im.flipV ? im.height : 0,
       })
       return node
     }
+    case 'table':
+      return buildTableNode(el)
+    case 'frame':
+      return buildFrameNode(el, images)
+    case 'embed':
+      return buildEmbedNode(el)
     case 'group': {
       const g = el
       const group = new Konva.Group({ id: g.id, x: g.x, y: g.y, rotation: g.rotation ?? 0 })
@@ -286,6 +320,109 @@ function buildKonvaNode(el: AnyElement, images: Map<string, HTMLImageElement>): 
     default:
       return new Konva.Group({ id: (el as { id: string }).id })
   }
+}
+
+// ── v0.6 elements (mirror v06-nodes.tsx, simplified) ───────
+
+function buildTableNode(tb: TableElement): Konva.Group {
+  const { colX, colW, rowH } = tableGeometry(tb)
+  const group = new Konva.Group({ id: tb.id, x: tb.x, y: tb.y })
+  for (let idx = 0; idx < tb.rows * tb.cols; idx += 1) {
+    const r = Math.floor(idx / tb.cols)
+    const c = idx % tb.cols
+    const cell = tb.cells[idx] ?? { text: '' }
+    const isHeader = r === 0
+    const cellFill = cell.fill ?? (isHeader ? tb.headerFill : tb.fill)
+    group.add(
+      new Konva.Rect({
+        x: colX[c],
+        y: r * rowH,
+        width: colW[c],
+        height: rowH,
+        fill: cellFill === 'transparent' ? undefined : cellFill,
+        stroke: tb.borderColor,
+        strokeWidth: tb.borderWidth,
+      })
+    )
+    if (cell.text) {
+      group.add(
+        new Konva.Text({
+          x: colX[c] + 10,
+          y: r * rowH,
+          width: Math.max(8, colW[c] - 20),
+          height: rowH,
+          text: cell.text,
+          fontSize: tb.fontSize,
+          fontFamily: tb.fontFamily,
+          fontStyle: cell.bold || isHeader ? 'bold' : 'normal',
+          fill: isHeader ? (tb.headerTextColor ?? '#FFFFFF') : tb.textColor,
+          verticalAlign: 'middle',
+          wrap: 'none',
+          ellipsis: true,
+        })
+      )
+    }
+  }
+  return group
+}
+
+function buildFrameNode(fr: FrameElement, images: Map<string, HTMLImageElement>): Konva.Group {
+  const d = frameClipPathD(fr.frameShape, fr.width, fr.height, fr.radius)
+  const group = new Konva.Group({
+    id: fr.id,
+    x: fr.x,
+    y: fr.y,
+    clipFunc: (ctx) => {
+      // clip to the frame shape (Path2D in the group's local space)
+      ctx._context.clip(new Path2D(d))
+    },
+  })
+  const img = fr.src ? images.get(fr.src) : undefined
+  if (img && fr.naturalWidth > 0 && fr.naturalHeight > 0) {
+    const scale = Math.max(fr.width / fr.naturalWidth, fr.height / fr.naturalHeight)
+    const dw = fr.naturalWidth * scale
+    const dh = fr.naturalHeight * scale
+    group.add(new Konva.Image({ image: img, x: (fr.width - dw) / 2, y: (fr.height - dh) / 2, width: dw, height: dh }))
+  } else {
+    group.add(new Konva.Path({ data: d, fill: withAlpha(fr.fill, 0.16), stroke: withAlpha('#FFFFFF', 0.85), strokeWidth: 2, dash: [8, 6] }))
+  }
+  return group
+}
+
+function buildEmbedNode(em: EmbedElement): Konva.Group {
+  const { bandH } = embedLayout(em.width, em.height)
+  const group = new Konva.Group({ id: em.id, x: em.x, y: em.y })
+  group.add(new Konva.Rect({ width: em.width, height: em.height, cornerRadius: 14, fill: '#15171C' }))
+  group.add(new Konva.Rect({ width: em.width, height: bandH, cornerRadius: [14, 14, 0, 0], fill: withAlpha(em.tint, 0.28) }))
+  group.add(
+    new Konva.Text({
+      x: 14,
+      y: bandH + 10,
+      width: Math.max(8, em.width - 28),
+      text: hostOf(em.url).toUpperCase(),
+      fontSize: Math.max(9, Math.round(em.height * 0.055)),
+      fontFamily: 'Inter',
+      fill: 'rgba(255,255,255,0.55)',
+      letterSpacing: 1.2,
+      wrap: 'none',
+      ellipsis: true,
+    })
+  )
+  group.add(
+    new Konva.Text({
+      x: 14,
+      y: bandH + 30,
+      width: Math.max(8, em.width - 28),
+      height: Math.max(16, em.height - bandH - 40),
+      text: em.title ?? em.url,
+      fontSize: Math.max(11, Math.round(em.height * 0.07)),
+      fontFamily: 'Inter',
+      fontStyle: 'bold',
+      fill: '#FFFFFF',
+      ellipsis: true,
+    })
+  )
+  return group
 }
 
 function applyGradient(
@@ -355,10 +492,10 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
   host.style.cssText = 'position:fixed;left:-99999px;top:0;'
   document.body.appendChild(host)
 
-  const nodesForPage = new Map<number, { node: Konva.Node; el: AnyElement }[]>()
+  const nodesForPage = new Map<number, { node: Konva.Node; el: AnyElement; base: AnimationNodeBase }[]>()
   const stageForPage = new Map<number, Konva.Stage>()
 
-  const buildPage = (index: number): { node: Konva.Node; el: AnyElement }[] => {
+  const buildPage = (index: number): { node: Konva.Node; el: AnyElement; base: AnimationNodeBase }[] => {
     let nodes = nodesForPage.get(index)
     if (nodes) return nodes
     const page = segments[index].page
@@ -394,6 +531,9 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
       .filter((el) => el.visible)
       .map((el) => {
         const node = buildKonvaNode(el, images)
+        // rotation + opacity mirror the canvas (rotation pivots on the node origin)
+        if (el.type !== 'group') node.rotation(el.rotation ?? 0)
+        node.opacity(el.opacity ?? 1)
         const shape = node as Konva.Shape
         if (el.shadow?.enabled && typeof shape.shadowColor === 'function') {
           shape.shadowColor(el.shadow.color)
@@ -401,7 +541,7 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
           shape.shadowOffset({ x: el.shadow.offsetX, y: el.shadow.offsetY })
         }
         layer.add(node as Konva.Shape | Konva.Group)
-        return { node, el }
+        return { node, el, base: captureAnimationBase(node, el) }
       })
     layer.batchDraw()
     nodesForPage.set(index, nodes)
@@ -412,43 +552,15 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
   /** apply animation state at page-local time t and draw */
   const drawPage = (index: number, t: number): HTMLCanvasElement | null => {
     const nodes = buildPage(index)
-    for (const { node, el } of nodes) {
+    for (const { node, el, base } of nodes) {
       const a = el.animation
-      if (a && a.kind !== 'none') {
-        const state = animateElementAt(el, t)
-        node.opacity((el.opacity ?? 1) * state.opacity)
-        if (state.reveal < 1) {
-          const r = Math.max(0.001, state.reveal)
-          node.scale({ x: r, y: 1 })
-          node.offsetY(el.height / 2)
-          node.x(el.x + state.dx)
-          node.y(el.y + state.dy + el.height / 2)
-        } else if (state.scaleX !== 1 || state.scaleY !== 1) {
-          node.scale({ x: state.scaleX, y: state.scaleY })
-          node.offsetX(el.width / 2)
-          node.offsetY(el.height / 2)
-          node.x(el.x + state.dx + el.width / 2)
-          node.y(el.y + state.dy + el.height / 2)
-        } else {
-          node.scale({ x: 1, y: 1 })
-          node.offsetX(0)
-          node.offsetY(0)
-          node.x(el.x + state.dx)
-          node.y(el.y + state.dy)
-        }
-        node.rotation((el.rotation ?? 0) + state.rotation)
-      } else {
-        node.opacity(el.opacity ?? 1)
-        node.scale({ x: 1, y: 1 })
-        node.offsetX(0)
-        node.offsetY(0)
-        node.x(el.x)
-        node.y(el.y)
-        node.rotation(el.rotation ?? 0)
-      }
+      if (!a || a.kind === 'none') continue // static nodes keep their built state
+      applyAnimationState(node, base, animateElementAt(el, t), a.direction)
     }
-    stageForPage.get(index)?.batchDraw()
-    return stageForPage.get(index)!.toCanvas()
+    const stage = stageForPage.get(index)
+    if (!stage) return null
+    stage.batchDraw()
+    return stage.toCanvas()
   }
 
   /** timeline segment start times */
@@ -502,8 +614,11 @@ export async function exportVideo(opts: VideoExportOptions): Promise<VideoExport
             ctx.drawImage(inCanvas, 0, 0, width, height)
             break
           case 'slide': {
-            const off = (1 - p) * (dir === 'right' ? -width : width)
-            ctx.drawImage(inCanvas, off, 0, width, height)
+            // direction = side the incoming page enters FROM (matches Preview)
+            const k = 1 - p
+            const offX = dir === 'left' ? -k * width : dir === 'right' ? k * width : 0
+            const offY = dir === 'up' ? k * height : dir === 'down' ? -k * height : 0
+            ctx.drawImage(inCanvas, offX, offY, width, height)
             break
           }
           case 'morph':

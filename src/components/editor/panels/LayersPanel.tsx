@@ -54,9 +54,12 @@ export function LayersPanel() {
   const commitRename = () => {
     if (!renaming) return
     const value = renaming.value.trim()
+    const el = currentPageData({ pages, currentPage }).elements.find((e) => e.id === renaming.id)
+    setRenaming(null)
+    // skip a no-op rename so it doesn't add an undo step
+    if (!el || (el.name ?? '') === value || (!el.name && value === elementLabel(el))) return
     // an empty name falls back to the auto label (undefined)
     updateElements([renaming.id], { name: value || undefined })
-    setRenaming(null)
   }
 
   const page = currentPageData({ pages, currentPage })
@@ -64,7 +67,7 @@ export function LayersPanel() {
   const ordered = [...page.elements].reverse()
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-[#16181D] text-[#EDEEF2]">
       <div className="px-4 pt-4 pb-3 border-b border-white/[0.07]">
         <h3 className="font-bold text-sm">Layers</h3>
         <p className="text-xs text-white/50 mt-0.5">Top of the list is the front-most element.</p>

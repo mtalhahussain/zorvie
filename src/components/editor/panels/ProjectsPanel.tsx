@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Clock, FolderOpen, Search, X } from 'lucide-react'
+import { Clock, FolderOpen } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
 import { PanelShell } from './panel-shell'
-import { DesignPreview } from '@/components/design-preview'
-import type { DesignRecord } from '@/lib/types'
+import { fetchDesign } from '@/components/dashboard/hooks'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +22,7 @@ interface DesignRow {
 export function ProjectsPanel() {
   const openEditor = useAppStore((s) => s.openEditor)
   const designId = useEditorStore((s) => s.designId)
+  const loadDesign = useEditorStore((s) => s.loadDesign)
   const [designs, setDesigns] = useState<DesignRow[] | null>(null)
   const [query, setQuery] = useState('')
 
@@ -35,15 +35,36 @@ export function ProjectsPanel() {
     return () => { alive = false }
   }, [])
 
-  const open = (row: DesignRow) => {
-    // fetch full record then load into editor
-    fetch(`/api/designs/${row.id}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('failed'))))
-      .then((d: DesignRecord) => {
-        openEditor(d)
-        toast({ title: `Opened “${d.name}”` })
-      })
-      .catch(() => toast({ title: 'Could not open that design', variant: 'destructive' }))
+  const [opening, setOpening] = useState<string | null>(null)
+
+  const open = async (row: DesignRow) => {
+    if (row.id === designId) {
+      toast({ title: `“${row.name}” is already open` })
+      return
+    }
+    if (opening) return
+    setOpening(row.id)
+    try {
+      // flush unsaved edits of the current design before switching away
+      const current = useEditorStore.getState()
+      if (current.designId && current.dirty) {
+        await fetch(`/api/designs/${current.designId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: current.designName, pages: current.pages }),
+        }).catch(() => undefined)
+      }
+      const d = await fetchDesign(row.id)
+      // The editor is already mounted, so its pendingDesign effect will not
+      // re-run: load the design into the editor store directly.
+      loadDesign(d)
+      openEditor(d)
+      toast({ title: `Opened “${d.name}”` })
+    } catch {
+      toast({ title: 'Could not open that design', variant: 'destructive' })
+    } finally {
+      setOpening(null)
+    }
   }
 
   const filtered = (designs ?? []).filter((d) => d.name.toLowerCase().includes(query.toLowerCase()))
@@ -62,16 +83,16 @@ export function ProjectsPanel() {
           {filtered.map((d) => (
             <button
               key={d.id}
-              onClick={() => open(d)}
+              onClick={() => void open(d)}
+              disabled={opening !== null}
               className={cn(
-                'group text-left rounded-xl overflow-hidden border transition-colors hover:border-[#7630D7]',
+                'group text-left rounded-xl overflow-hidden border transition-colors hover:border-[#7630D7] disabled:opacity-60',
                 d.id === designId ? 'border-[#02C0CC]' : 'border-white/10'
               )}
               aria-label={`Open design ${d.name}`}
             >
               <div className="aspect-[4/3] bg-[#0F1015] overflow-hidden relative">
                 {d.thumbnail ? (
-                   
                   <img src={d.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-white/20">
@@ -95,6 +116,3 @@ export function ProjectsPanel() {
     </PanelShell>
   )
 }
-
-void Search
-void X

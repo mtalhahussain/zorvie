@@ -34,7 +34,7 @@ const MIN_CROP = 16
 export function CropDialog({ element, open, onOpenChange }: { element: ImageElement; open: boolean; onOpenChange: (o: boolean) => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-2xl">
+      <DialogContent className="rounded-[28px] bg-[#16181D] border-white/10 text-white sm:max-w-2xl [&_[data-slot=dialog-close]]:!text-white/80 [&_[data-slot=dialog-close]]:!bg-transparent">
         {/* keyed inner: every dialog open / image switch starts from a full frame */}
         {open && <CropDialogInner key={element.id} element={element} onClose={() => onOpenChange(false)} />}
       </DialogContent>
@@ -57,6 +57,13 @@ function CropDialogInner({ element, onClose }: { element: ImageElement; onClose:
 
   const [rect, setRect] = useState<Rect>({ x: 0, y: 0, w: fit.w, h: fit.h })
   const [aspectId, setAspectId] = useState('free')
+  // the real bitmap size may only be known after the image loads — restart from a full frame then
+  const [fitKey, setFitKey] = useState(`${fit.w}x${fit.h}`)
+  if (fitKey !== `${fit.w}x${fit.h}`) {
+    setFitKey(`${fit.w}x${fit.h}`)
+    setRect({ x: 0, y: 0, w: fit.w, h: fit.h })
+    setAspectId('free')
+  }
   const dragRef = useRef<{ handle: Handle; startX: number; startY: number; rect: Rect } | null>(null)
 
   const origRatio = natW / natH

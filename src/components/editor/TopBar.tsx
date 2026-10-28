@@ -7,6 +7,7 @@ import { useEditorStore } from '@/store/editor-store'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { toast } from '@/hooks/use-toast'
 import { ExportDialog } from './ExportDialog'
 import { ResizeDialog } from './ResizeDialog'
 import { ShareDialog } from './ShareDialog'
@@ -51,6 +52,24 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
   const [translateOpen, setTranslateOpen] = useState(false)
   const [magicLayersOpen, setMagicLayersOpen] = useState(false)
 
+  /** File / mode menu rows — explicit dark-theme focus colours (the shadcn
+   *  defaults resolve to light tokens because <html> has no `dark` class) */
+  const menuItem = "gap-2 text-white focus:bg-white/10 focus:text-white [&_svg:not([class*='text-'])]:text-white/70"
+
+  /** explicit "Save changes": report the outcome (autosave stays silent) */
+  const saveNow = async () => {
+    await onSave()
+    const s = useEditorStore.getState()
+    if (!s.dirty && !s.saving) toast({ title: 'All changes saved' })
+    else if (!s.saving) toast({ title: 'Could not save right now', description: 'Your changes are kept here and will retry automatically.', variant: 'destructive' })
+  }
+
+  /** commit the title: never persist an empty design name */
+  const commitName = () => {
+    if (!name.trim()) rename('Untitled design')
+    void onSave()
+  }
+
   const item = 'h-10 px-3 rounded-xl text-white/95 hover:bg-white/15 transition-colors text-sm font-semibold flex items-center gap-1.5 select-none'
 
   // canva behaviour: an element selection replaces the topbar middle section with the context toolbar
@@ -77,34 +96,34 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56 bg-[#16181D] border-white/10 text-white">
-          <DropdownMenuItem className="gap-2" onClick={goDashboard}>
+          <DropdownMenuItem className={menuItem} onClick={goDashboard}>
             <Home size={15} /> Home
           </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2" onClick={() => void onSave()}>
+          <DropdownMenuItem className={menuItem} onClick={() => void saveNow()}>
             <Cloud size={15} /> Save changes
           </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2" onClick={() => setResizeOpen(true)}>
+          <DropdownMenuItem className={menuItem} onClick={() => setResizeOpen(true)}>
             <Play size={15} /> Magic Resize
           </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2" onClick={() => setMagicLayersOpen(true)}>
+          <DropdownMenuItem className={menuItem} onClick={() => setMagicLayersOpen(true)}>
             <Wand2 size={15} /> Magic Layers — edit a flat design
           </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2" onClick={() => setTranslateOpen(true)}>
+          <DropdownMenuItem className={menuItem} onClick={() => setTranslateOpen(true)}>
             <Languages size={15} /> Translate design…
           </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2" onClick={toggleRulers}>
+          <DropdownMenuItem className={menuItem} onClick={toggleRulers}>
             <Ruler size={15} /> {showRulers ? 'Hide rulers' : 'Show rulers'}
             <span className="ml-auto text-[10px] text-white/40 font-semibold">⇧R</span>
           </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2" onClick={() => setVersionsOpen(true)}>
+          <DropdownMenuItem className={menuItem} onClick={() => setVersionsOpen(true)}>
             <History size={15} /> Version history
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
-          <DropdownMenuItem className="gap-2" onClick={() => setExportOpen(true)}>
+          <DropdownMenuItem className={menuItem} onClick={() => setExportOpen(true)}>
             <Download size={15} /> Download
           </DropdownMenuItem>
           <DropdownMenuSeparator className="bg-white/10" />
-          <DropdownMenuItem className="gap-2" onClick={onShortcuts}>
+          <DropdownMenuItem className={menuItem} onClick={onShortcuts}>
             Keyboard shortcuts
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -128,8 +147,8 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-44 bg-[#16181D] border-white/10 text-white">
-          <DropdownMenuItem onClick={() => setEditingMode('editing')}>✏️ Editing — make changes</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setEditingMode('viewing')}>👁 Viewing — read only</DropdownMenuItem>
+          <DropdownMenuItem className={cn(menuItem, editingMode === 'editing' && 'bg-white/10')} onClick={() => setEditingMode('editing')}>✏️ Editing — make changes</DropdownMenuItem>
+          <DropdownMenuItem className={cn(menuItem, editingMode === 'viewing' && 'bg-white/10')} onClick={() => setEditingMode('viewing')}>👁 Viewing — read only</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -138,7 +157,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
         <input
           value={name}
           onChange={(e) => rename(e.target.value)}
-          onBlur={() => void onSave()}
+          onBlur={commitName}
           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
           className="text-sm font-semibold bg-transparent text-white outline-none rounded-lg px-2 py-1.5 hover:bg-white/15 focus:bg-white/20 min-w-0 w-32 sm:w-48 truncate placeholder:text-white/60"
           aria-label="Design name"

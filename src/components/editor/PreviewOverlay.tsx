@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { ChevronLeft, ChevronRight, Pause, Play, X, VolumeX } from 'lucide-react'
+import { Accessibility, ChevronLeft, ChevronRight, Pause, Play, RotateCcw, X } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -10,107 +10,168 @@ import { pageHoldDuration } from '@/lib/animations'
 
 const PreviewStage = dynamic(() => import('./canvas/preview-stage'), { ssr: false })
 
-/** page transition CSS — applied to the outgoing/incoming page wrappers */
-function transitionClass(kind: string | undefined, phase: 'in' | 'out', direction: string | undefined): string {
-  const dir = direction ?? 'left'
+type TransitionPhase = 'start' | 'run'
+
+/**
+ * Page transition CSS. Direction names the side the incoming page enters
+ * FROM (matches the Animate panel labels and the video exporter):
+ * left = from left, right = from right, up = from bottom, down = from top.
+ *  - incoming: mounts in its "from" state (phase start), then animates to rest
+ *  - outgoing: starts at rest, then animates to its "exit" state
+ */
+function incomingClass(kind: string | undefined, direction: string | undefined, phase: TransitionPhase): string {
+  if (phase === 'run') return ''
   switch (kind) {
     case 'fade':
-      return phase === 'out' ? 'opacity-0' : ''
-    case 'slide': {
-      if (phase === 'out') {
-        return dir === 'left' || dir === 'right'
-          ? dir === 'left' ? '-translate-x-full' : 'translate-x-full'
-          : dir === 'up' ? '-translate-y-full' : 'translate-y-full'
+      return 'opacity-0'
+    case 'slide':
+      switch (direction ?? 'left') {
+        case 'right':
+          return 'translate-x-full'
+        case 'up':
+          return 'translate-y-full'
+        case 'down':
+          return '-translate-y-full'
+        default:
+          return '-translate-x-full'
       }
-      return ''
-    }
     case 'morph':
-      return phase === 'out' ? 'opacity-0 scale-110' : 'scale-95'
+      return 'opacity-0 scale-95'
     default:
       return ''
   }
 }
 
-const TRANSITION_MS = (page: { transition?: { duration?: number } }) =>
-  Math.round((page.transition?.duration ?? 0.7) * 1000)
+function outgoingClass(kind: string | undefined, direction: string | undefined, phase: TransitionPhase): string {
+  if (phase === 'start') return ''
+  switch (kind) {
+    case 'slide':
+      switch (direction ?? 'left') {
+        case 'right':
+          return '-translate-x-full'
+        case 'up':
+          return '-translate-y-full'
+        case 'down':
+          return 'translate-y-full'
+        default:
+          return 'translate-x-full'
+      }
+    case 'morph':
+      return 'opacity-0 scale-110'
+    default:
+      // fade: the outgoing page stays put while the new one fades in on top
+      return ''
+  }
+}
+
+const TRANSITION_MS = (page: { transition?: { duration?: number } } | undefined) =>
+  Math.round((page?.transition?.duration ?? 0.7) * 1000)
 
 /** Canva-style fullscreen Preview — animated pages, transitions, autoplay. */
 export function PreviewOverlay() {
   const open = useEditorStore((s) => s.previewOpen)
   const setOpen = useEditorStore((s) => s.setPreviewOpen)
   const pages = useEditorStore((s) => s.pages)
+  const currentPage = useEditorStore((s) => s.currentPage)
   const width = useEditorStore((s) => s.width)
   const height = useEditorStore((s) => s.height)
   const [index, setIndex] = useState(0)
   /** previous index during a transition (rendered under the new page) */
   const [outgoing, setOutgoing] = useState<number | null>(null)
+  const [phase, setPhase] = useState<TransitionPhase>('run')
   const [autoPlay, setAutoPlay] = useState(false)
   const [reduceMotion, setReduceMotion] = useState(false)
   const [playKey, setPlayKey] = useState(0)
-  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [wasOpen, setWasOpen] = useState(open)
+
+  // each time the preview opens, start on the page being edited
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setIndex(currentPage)
+      setOutgoing(null)
+      setPhase('run')
+      setPlayKey((k) => k + 1)
+    }
+  }
 
   // clamp when pages shrink — derived at render, no effect needed
   const safeIndex = Math.max(0, Math.min(index, pages.length - 1))
 
   const goTo = useCallback(
     (nextIdx: number) => {
-      setIndex((current) => {
-        const target = Math.max(0, Math.min(nextIdx, pages.length - 1))
-        if (target === current) return current
-        setPlayKey((k) => k + 1)
-        setOutgoing(current)
-        return target
-      })
+      const target = Math.max(0, Math.min(nextIdx, pages.length - 1))
+      if (target === safeIndex) return
+      const tr = pages[target]?.transition
+      const animate = !reduceMotion && !!tr && tr.kind !== 'none'
+      setOutgoing(animate ? safeIndex : null)
+      setPhase(animate ? 'start' : 'run')
+      setIndex(target)
+      setPlayKey((k) => k + 1)
     },
-    [pages.length]
+    [pages, safeIndex, reduceMotion]
   )
 
-  const next = useCallback(() => goTo(safeIndex + 1), [goTo, safeIndex])
+  const next = useCallback(
+    () => goTo(safeIndex >= pages.length - 1 && autoPlay ? 0 : safeIndex + 1),
+    [goTo, safeIndex, pages.length, autoPlay]
+  )
   const prev = useCallback(() => goTo(safeIndex - 1), [goTo, safeIndex])
+  const replay = useCallback(() => {
+    setOutgoing(null)
+    setPhase('run')
+    setPlayKey((k) => k + 1)
+  }, [])
 
-  // clear the outgoing page once the transition finishes
+  // run the transition: flip to the "run" phase after the incoming page has
+  // painted in its start state, then drop the outgoing page when it's done
   useEffect(() => {
     if (outgoing === null) return
-    const t = setTimeout(() => setOutgoing(null), TRANSITION_MS(pages[safeIndex]))
-    return () => clearTimeout(t)
-  }, [outgoing, safeIndex, pages])
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setPhase('run'))
+    })
+    const t = setTimeout(() => setOutgoing(null), TRANSITION_MS(pages[safeIndex]) + 60)
+    return () => {
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+      clearTimeout(t)
+    }
+  }, [outgoing, playKey, safeIndex, pages])
 
   // keyboard
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
-      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next() }
-      if (e.key === 'ArrowLeft') { e.preventDefault(); prev() }
+      else if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); next() }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev() }
+      else if (e.key === 'Home') { e.preventDefault(); goTo(0) }
+      else if (e.key === 'End') { e.preventDefault(); goTo(pages.length - 1) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, next, prev, setOpen])
+  }, [open, next, prev, goTo, pages.length, setOpen])
 
-  // autoplay: advance after each page's hold duration
+  // autoplay: advance after each page's hold duration (loops at the end)
   useEffect(() => {
     if (!open || !autoPlay) return
     const page = pages[safeIndex]
     if (!page) return
-    const hold = (reduceMotion ? 0 : 1) * pageHoldDuration(page) * 1000 + TRANSITION_MS(page)
-    advanceTimer.current = setTimeout(() => {
-      if (safeIndex >= pages.length - 1) {
-        // loop back to the first page
-        goTo(0)
-      } else {
-        next()
-      }
-    }, Math.max(400, hold))
-    return () => {
-      if (advanceTimer.current) clearTimeout(advanceTimer.current)
-    }
-  }, [open, autoPlay, safeIndex, pages, next, goTo, reduceMotion])
+    // reduce motion skips transitions but keeps the reading time
+    const hold = pageHoldDuration(page) * 1000 + (reduceMotion ? 0 : TRANSITION_MS(page))
+    const timer = setTimeout(next, Math.max(400, hold))
+    return () => clearTimeout(timer)
+  }, [open, autoPlay, safeIndex, pages, next, reduceMotion, playKey])
 
   if (!open) return null
   const page = pages[safeIndex]
   const outgoingPage = outgoing !== null ? pages[outgoing] : null
-  const transitionKind = page?.transition?.kind ?? 'none'
-  const inClass = transitionClass(transitionKind, 'in', page?.transition?.direction)
+  const transitionKind = outgoingPage ? page?.transition?.kind ?? 'none' : 'none'
+  const transitionDir = page?.transition?.direction
+  const durationMs = TRANSITION_MS(page)
+  const inClass = incomingClass(transitionKind, transitionDir, phase)
+  const outClass = outgoingClass(transitionKind, transitionDir, phase)
 
   return (
     <div className="fixed inset-0 z-[100] bg-[#0F1015] flex flex-col" role="dialog" aria-label="Design preview">
@@ -134,12 +195,23 @@ export function PreviewOverlay() {
           <Button
             variant="ghost"
             size="icon"
-            className={cn('rounded-full text-white hover:bg-white/15 hover:text-white', reduceMotion && 'bg-white/15 text-[#02C0CC]')}
-            onClick={() => setReduceMotion((v) => !v)}
-            aria-label="Toggle reduced motion"
-            title="Reduce motion (accessibility)"
+            className="rounded-full text-white hover:bg-white/15 hover:text-white"
+            onClick={replay}
+            aria-label="Replay animations"
+            title="Replay animations"
           >
-            <VolumeX size={17} />
+            <RotateCcw size={17} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn('rounded-full text-white hover:bg-white/15 hover:text-white', reduceMotion && 'bg-white/15 text-[#02C0CC] hover:text-[#02C0CC]')}
+            onClick={() => setReduceMotion((v) => !v)}
+            aria-label="Reduce motion"
+            aria-pressed={reduceMotion}
+            title={reduceMotion ? 'Reduce motion: on (animations and transitions skipped)' : 'Reduce motion (accessibility)'}
+          >
+            <Accessibility size={17} />
           </Button>
           <Button variant="ghost" size="icon" className="rounded-full text-white hover:bg-white/15 hover:text-white" onClick={() => setOpen(false)} aria-label="Close preview">
             <X size={19} />
@@ -149,17 +221,15 @@ export function PreviewOverlay() {
 
       <div className="flex-1 min-h-0 relative bg-[#0F1015]">
         <div className="absolute inset-0 p-4 pb-16">
-          <div className="relative w-full h-full max-w-[min(100%,calc((100vh-10rem)*var(--ar)))] mx-auto" style={{ ['--ar' as string]: `${width / height}` }}>
+          <div className="relative w-full h-full overflow-hidden max-w-[min(100%,calc((100vh-10rem)*var(--ar)))] mx-auto" style={{ ['--ar' as string]: `${width / height}` }}>
             {/* outgoing page (during a transition) */}
             {outgoingPage && (
               <div
                 key={`out-${outgoing}-${playKey}`}
-                className="absolute inset-0 transition-all ease-in-out"
-                style={{ transitionDuration: `${TRANSITION_MS(pages[safeIndex] ?? {})}ms` }}
+                className={cn('absolute inset-0 transition-all ease-in-out', outClass)}
+                style={{ transitionDuration: `${durationMs}ms` }}
               >
-                <div className={cn('w-full h-full transition-all ease-in-out', transitionClass(transitionKind, 'out', page?.transition?.direction))} style={{ transitionDuration: `${TRANSITION_MS(pages[safeIndex] ?? {})}ms` }}>
-                  <PreviewStage page={outgoingPage} designWidth={width} designHeight={height} animated={false} />
-                </div>
+                <PreviewStage page={outgoingPage} designWidth={width} designHeight={height} animated={false} />
               </div>
             )}
             {/* current page */}
@@ -167,7 +237,7 @@ export function PreviewOverlay() {
               <div
                 key={`in-${page.id}-${playKey}`}
                 className={cn('absolute inset-0 transition-all ease-in-out', inClass)}
-                style={{ transitionDuration: `${TRANSITION_MS(page)}ms` }}
+                style={{ transitionDuration: `${durationMs}ms` }}
               >
                 <PreviewStage page={page} designWidth={width} designHeight={height} animated playKey={playKey} reduceMotion={reduceMotion} />
               </div>
@@ -205,7 +275,7 @@ export function PreviewOverlay() {
               onClick={() => goTo(i)}
               className={cn('h-2 rounded-full transition-all', i === safeIndex ? 'w-7 bg-[#02C0CC]' : 'w-2 bg-white/25 hover:bg-white/50')}
               aria-label={`Go to page ${i + 1}`}
-              aria-current={i === index}
+              aria-current={i === safeIndex ? 'page' : undefined}
             />
           ))}
         </div>

@@ -23,13 +23,16 @@ function toRecord(row: Record<string, unknown>): DesignRecord {
 export function useDesigns() {
   const [designs, setDesigns] = useState<DesignMeta[] | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch('/api/designs', { cache: 'no-store' })
-      if (res.ok) setDesigns(await res.json())
+      if (!res.ok) throw new Error('Failed to list designs')
+      setDesigns(await res.json())
+      setError(false)
     } catch {
-      setDesigns([])
+      setError(true)
     } finally {
       setLoading(false)
     }
@@ -39,7 +42,7 @@ export function useDesigns() {
     void refresh()
   }, [refresh])
 
-  return { designs, loading, refresh }
+  return { designs, loading, error, refresh }
 }
 
 export async function createDesign(opts: {
@@ -48,6 +51,7 @@ export async function createDesign(opts: {
   height: number
   pages: PageData[]
   source?: string
+  thumbnail?: string | null
 }): Promise<DesignRecord> {
   const res = await fetch('/api/designs', {
     method: 'POST',
@@ -58,6 +62,7 @@ export async function createDesign(opts: {
       height: opts.height,
       pages: opts.pages,
       source: opts.source ?? 'blank',
+      ...(opts.thumbnail ? { thumbnail: opts.thumbnail } : {}),
     }),
   })
   if (!res.ok) throw new Error('Failed to create design')
@@ -78,6 +83,7 @@ export async function duplicateDesign(id: string): Promise<DesignRecord> {
     height: source.height,
     pages: source.pages,
     source: `duplicate:${id}`,
+    thumbnail: source.thumbnail,
   })
 }
 

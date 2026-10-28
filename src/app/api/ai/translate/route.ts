@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
   return withProvider('translate', req, { limit: 15, windowSec: 60 }, async (zai) => {
     const completion = await zai.chat.completions.create({
       messages: [
-        { role: 'assistant', content: system },
+        { role: 'system', content: system },
         { role: 'user', content: user },
       ],
       thinking: { type: 'disabled' },

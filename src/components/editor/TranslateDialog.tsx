@@ -1,12 +1,13 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Languages, Loader2, Globe, ArrowRight } from 'lucide-react'
+import { Languages, Loader2, Globe, ArrowRight, AlertTriangle } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
+import { useAICapabilities } from '@/hooks/use-ai-capabilities'
 import type { AnyElement, TableElement, TextElement } from '@/lib/types'
 
 const LANGUAGES: { name: string; native: string; code: string }[] = [
@@ -45,7 +46,8 @@ function collectTexts(els: AnyElement[], out: TextElement[] = []): TextElement[]
   return out
 }
 
-/** v0.6: collect table cells with text (tables at top level + inside groups). */
+/** v0.6: collect table cells with text on every page (top-level + inside
+ *  groups) — `translateTexts` patches them across all pages in one undo step. */
 interface TableCellEntry {
   id: string
   index: number
@@ -53,14 +55,12 @@ interface TableCellEntry {
 }
 function collectCellTexts(els: AnyElement[], out: TableCellEntry[] = []): TableCellEntry[] {
   for (const el of els) {
-    if (el.type === 'table') {
-      const tb = el as TableElement
-      tb.cells.forEach((c, i) => {
-        if (c.text.trim()) out.push({ id: tb.id, index: i, text: c.text })
-      })
-    } else if (el.type === 'group') {
-      collectCellTexts(el.children, out)
-    }
+    if (el.type === 'group') { collectCellTexts(el.children, out); continue }
+    if (el.type !== 'table') continue
+    const tb = el as TableElement
+    tb.cells.forEach((c, i) => {
+      if (c.text.trim()) out.push({ id: tb.id, index: i, text: c.text })
+    })
   }
   return out
 }
@@ -71,13 +71,15 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
   const translateTexts = useEditorStore((s) => s.translateTexts)
   const [lang, setLang] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const { loaded: aiLoaded, configured: aiConfigured } = useAICapabilities()
+  const aiMissing = aiLoaded && !aiConfigured
 
   const texts = useMemo(() => collectTexts(pages.flatMap((p) => p.elements)), [pages])
   const cellEntries = useMemo(() => collectCellTexts(pages.flatMap((p) => p.elements)), [pages])
   const picked = LANGUAGES.find((l) => l.code === lang) ?? null
 
   const run = async () => {
-    if (!picked || busy) return
+    if (!picked || busy || aiMissing) return
     if (!texts.length && !cellEntries.length) return
     setBusy(true)
     try {
@@ -90,35 +92,23 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
           texts: allTexts,
         }),
       })
-      const data = (await res.json()) as { translations?: string[]; error?: string }
+      const data = (await res.json().catch(() => ({}))) as { translations?: string[]; error?: string; code?: string }
       if (!res.ok || !Array.isArray(data.translations) || data.translations.length !== allTexts.length) {
         toast({ title: 'Translate failed', description: data.error ?? 'Please try again.', variant: 'destructive' })
         return
       }
       const translations = data.translations
-      // v0.6: text elements ride the store action (undoable)…
-      if (texts.length) {
-        translateTexts(texts.map((t, i) => ({ id: t.id, text: translations[i] })))
-      }
-      // …and table cell texts apply as element patches
+      // one undo step for the whole translation (texts + table cells, all pages)
       const cellsById = new Map<string, { index: number; text: string }[]>()
       cellEntries.forEach((c, k) => {
-        const translated = translations[texts.length + k]
         const list = cellsById.get(c.id) ?? []
-        list.push({ index: c.index, text: translated })
+        list.push({ index: c.index, text: translations[texts.length + k] })
         cellsById.set(c.id, list)
       })
-      const updateElements = useEditorStore.getState().updateElements
-      const currentPageTables = pages.flatMap((p) => p.elements).filter((e) => e.type === 'table') as TableElement[]
-      for (const [id, list] of cellsById) {
-        const table = currentPageTables.find((t) => t.id === id)
-        if (!table) continue
-        const cells = table.cells.map((c, i) => {
-          const hit = list.find((l) => l.index === i)
-          return hit ? { ...c, text: hit.text } : c
-        })
-        updateElements([id], { cells })
-      }
+      translateTexts([
+        ...texts.map((t, i) => ({ id: t.id, text: translations[i] })),
+        ...[...cellsById].map(([id, cells]) => ({ id, cells })),
+      ])
       const total = texts.length + cellEntries.length
       toast({ title: `Translated to ${picked.native}`, description: `${total} text${total === 1 ? '' : 's'} updated. Ctrl+Z to undo.` })
       onOpenChange(false)
@@ -138,10 +128,20 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
           </DialogTitle>
           <DialogDescription className="text-white/60">
             {texts.length + cellEntries.length
-              ? `Translate all ${texts.length + cellEntries.length} text${texts.length + cellEntries.length === 1 ? '' : 's'} (incl. table cells) across ${pages.length} page${pages.length === 1 ? '' : 's'} with AI. Your layout stays intact.`
+              ? `Translate all ${texts.length + cellEntries.length} text${texts.length + cellEntries.length === 1 ? '' : 's'} across ${pages.length} page${pages.length === 1 ? '' : 's'}${cellEntries.length ? ' (incl. table cells)' : ''} with AI. Your layout stays intact.`
               : 'This design has no text to translate yet.'}
           </DialogDescription>
         </DialogHeader>
+
+        {aiMissing && (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-[12px] text-amber-100 flex items-start gap-2">
+            <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-300" />
+            <span>
+              <span className="font-semibold">AI not configured.</span> Translate needs an AI provider set up on the
+              server (ZAI_API_KEY). Your design is unchanged.
+            </span>
+          </div>
+        )}
 
         <div className="max-h-[46vh] overflow-y-auto cv-scroll pr-1">
           <div className="grid grid-cols-2 gap-1.5">
@@ -177,7 +177,7 @@ export function TranslateDialog({ open, onOpenChange }: { open: boolean; onOpenC
           </span>
           <Button
             className="btn-cv h-11 rounded-xl ml-auto px-5"
-            disabled={!picked || (!texts.length && !cellEntries.length) || busy}
+            disabled={!picked || (!texts.length && !cellEntries.length) || busy || aiMissing}
             onClick={() => void run()}
           >
             {busy ? <Loader2 size={15} className="mr-1.5 animate-spin" /> : <Languages size={15} className="mr-1.5" />}

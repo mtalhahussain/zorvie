@@ -33,15 +33,17 @@ export function UploadsPanel() {
     for (const file of Array.from(files)) {
       try {
         const { src, w, h } = await readImageFile(file)
-        uploadGallery.items.unshift({ src, w, h })
         await addImageFromFile(file)
+        // only list files that actually made it onto the canvas
+        uploadGallery.items.unshift({ src, w, h })
         ok += 1
       } catch {
         // ignore this file
       }
     }
-    if (ok === 0) toast({ title: 'Could not upload images', variant: 'destructive' })
-    else toast({ title: `${ok} image${ok > 1 ? 's' : ''} uploaded` })
+    const failed = files.length - ok
+    if (ok === 0) toast({ title: 'Could not upload images', description: 'Use PNG, JPG, SVG or GIF files under 25 MB.', variant: 'destructive' })
+    else toast({ title: `${ok} image${ok > 1 ? 's' : ''} uploaded`, description: failed ? `${failed} file${failed > 1 ? 's were' : ' was'} skipped (not an image or over 25 MB).` : undefined })
     force((n) => n + 1)
   }
 
@@ -60,20 +62,22 @@ export function UploadsPanel() {
     const ratio = Math.max(state.width / item.w, state.height / item.h)
     const w = Math.round(item.w * ratio)
     const h = Math.round(item.h * ratio)
-    state.addElement(
-      createImageElement(item.src, item.w, item.h, {
-        x: Math.round((state.width - w) / 2),
-        y: Math.round((state.height - h) / 2),
-        width: w,
-        height: h,
-      })
+    // one undo step: inserted at the back, already locked — a canva background
+    // behaves non-interactive
+    state.addElementAt(
+      {
+        ...createImageElement(item.src, item.w, item.h, {
+          x: Math.round((state.width - w) / 2),
+          y: Math.round((state.height - h) / 2),
+          width: w,
+          height: h,
+        }),
+        locked: true,
+      },
+      0
     )
-    // send to back + lock — a canva background behaves non-interactive
-    const el = useEditorStore.getState().pages[useEditorStore.getState().currentPage].elements.at(-1)
-    if (el) {
-      state.moveLayer(el.id, 'back')
-      state.setLock([el.id], true)
-    }
+    // locked backgrounds shouldn't stay selected
+    state.clearSelection()
     toast({ title: 'Set as background' })
   }
 

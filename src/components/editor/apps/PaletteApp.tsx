@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Palette, RefreshCw } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
-import { createShapeElement, createTextElement } from '@/lib/types'
+import { createShapeElement, createTextElement, type AnyElement } from '@/lib/types'
 import { AppHeader, type AppPanelProps } from './registry'
 import { toast } from '@/hooks/use-toast'
 
@@ -51,24 +51,23 @@ export function PaletteApp({ onClose }: AppPanelProps) {
 
   const addToCanvas = () => {
     const store = useEditorStore.getState()
-    store.pushHistory()
     const W = 640, H = 160
     const x = Math.round((store.width - W) / 2)
     const y = Math.round((store.height - H) / 2)
     const swatchW = W / colors.length
-    colors.forEach((c, i) => {
-      store.addElement(
-        createShapeElement('rect', {
-          x: Math.round(x + i * swatchW),
-          y,
-          width: Math.round(swatchW - 8),
-          height: H,
-          fill: hslToHex(c),
-          cornerRadius: 16,
-        })
-      )
-    })
-    store.addElement(createTextElement({ x: x + 4, y: y + H + 14, width: W, text: `${mode} palette`, fontSize: 22, bold: true, fill: '#6B7280', align: 'left' }))
+    const els: AnyElement[] = colors.map((c, i) =>
+      createShapeElement('rect', {
+        x: Math.round(x + i * swatchW),
+        y,
+        width: Math.round(swatchW - 8),
+        height: H,
+        fill: hslToHex(c),
+        cornerRadius: 16,
+      })
+    )
+    els.push(createTextElement({ x: x + 4, y: y + H + 14, width: W, text: `${mode} palette`, fontSize: 22, bold: true, fill: '#6B7280', align: 'left' }))
+    // one bulk insert = one undo step
+    store.addElementsBulk(els)
     toast({ title: 'Palette added to canvas' })
   }
 

@@ -15,10 +15,21 @@ export function ZoomControls() {
   const zoomOut = useEditorStore((s) => s.zoomOut)
   const setZoom = useEditorStore((s) => s.setZoom)
   const fitToScreen = useEditorStore((s) => s.fitToScreen)
+  const viewport = useEditorStore((s) => s.viewport)
+  const width = useEditorStore((s) => s.width)
+  const height = useEditorStore((s) => s.height)
+  const showRulers = useEditorStore((s) => s.showRulers)
 
   const [open, setOpen] = useState(false)
   const percent = Math.round(zoom * 100)
-  const isFit = Math.abs(zoom - 1) < 0.001 || percent === 100
+  // same formula as CanvasStage.fitToScreen — "Fit" is ticked only when the
+  // page actually is at its fit zoom (not merely at 100%)
+  const pad = showRulers ? 128 : 100
+  const fitZoom =
+    viewport.width > 50 && viewport.height > 50
+      ? Math.max(0.05, Math.min((viewport.width - pad) / width, (viewport.height - pad) / height, 1.5))
+      : null
+  const isFit = fitZoom !== null && Math.abs(zoom - fitZoom) < 0.001
 
   const applyPreset = (p: number) => {
     setZoom(p / 100)
@@ -26,15 +37,14 @@ export function ZoomControls() {
   }
 
   const doFill = () => {
-    // Fill = zoom page to cover the viewport height
-    const vp = useEditorStore.getState().viewport
-    const { width, height } = useEditorStore.getState()
-    if (vp.height > 50) {
-      setZoom(Math.max(0.05, (vp.height - 60) / height))
+    // Fill = zoom the page so it covers the whole viewport (canva behaviour)
+    if (viewport.width > 50 && viewport.height > 50) {
+      // re-centre first so the zoom (anchored at the viewport centre) fills evenly
+      canvasBridge.fitToScreen?.()
+      setZoom(Math.max(viewport.width / width, viewport.height / height))
     } else {
       setZoom(1)
     }
-    void width
     setOpen(false)
   }
 

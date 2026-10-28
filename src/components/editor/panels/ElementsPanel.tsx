@@ -55,6 +55,13 @@ export function ElementsPanel() {
     return GRAPHICS.filter((g) => g.name.toLowerCase().includes(q))
   }, [query])
 
+  // basic shapes (rect/circle/…) aren't graphics, so search them too
+  const filteredShapes = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return BASIC_SHAPES.filter((s) => s.label.toLowerCase().includes(q) || s.id.includes(q))
+  }, [query])
+
   const searchPlaceholder = 'Search shapes & graphics'
 
   return (
@@ -74,14 +81,14 @@ export function ElementsPanel() {
             aria-label={searchPlaceholder}
           />
         </div>
-        <TabsList className="mt-3 w-full grid grid-cols-4 h-8 bg-white/[0.05]">
-          <TabsTrigger value="shapes" className="text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Shapes</TabsTrigger>
-          <TabsTrigger value="lines" className="text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Lines</TabsTrigger>
-          <TabsTrigger value="graphics" className="text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Graphics</TabsTrigger>
-          <TabsTrigger value="stickers" className="text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Stickers</TabsTrigger>
-          <TabsTrigger value="tables" className="text-[11px] text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Tables</TabsTrigger>
-          <TabsTrigger value="frames" className="text-[11px] text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Frames</TabsTrigger>
-          <TabsTrigger value="embeds" className="text-[11px] text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Embeds</TabsTrigger>
+        <TabsList className="mt-3 w-full grid grid-cols-4 gap-1 h-auto bg-white/[0.05]">
+          <TabsTrigger value="shapes" className="h-7 text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Shapes</TabsTrigger>
+          <TabsTrigger value="lines" className="h-7 text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Lines</TabsTrigger>
+          <TabsTrigger value="graphics" className="h-7 text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Graphics</TabsTrigger>
+          <TabsTrigger value="stickers" className="h-7 text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Stickers</TabsTrigger>
+          <TabsTrigger value="tables" className="h-7 text-[11px] text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Tables</TabsTrigger>
+          <TabsTrigger value="frames" className="h-7 text-[11px] text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Frames</TabsTrigger>
+          <TabsTrigger value="embeds" className="h-7 text-[11px] text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Embeds</TabsTrigger>
         </TabsList>
       </div>
 
@@ -128,8 +135,13 @@ export function ElementsPanel() {
       <TabsContent value="graphics" className="flex-1 overflow-y-auto cv-scroll-dark p-4 mt-0">
         {filteredGraphics ? (
           <>
-            <SectionTitle>{filteredGraphics.length ? `Results for “${query}”` : `No results for “${query}”`}</SectionTitle>
+            <SectionTitle>{filteredGraphics.length + filteredShapes.length ? `Results for “${query}”` : `No results for “${query}”`}</SectionTitle>
             <div className="grid grid-cols-3 gap-2">
+              {filteredShapes.map((s) => (
+                <ShapeTile key={s.id} label={s.label} onClick={() => addShape(s.id)}>
+                  {s.icon ? <s.icon size={26} strokeWidth={1.6} className="text-white/80" /> : <span className="h-[22px] w-[22px] rounded-md border-2 border-white/80" aria-hidden="true" />}
+                </ShapeTile>
+              ))}
               {filteredGraphics.map((g) => (
                 <GraphicTile key={g.id} g={g} />
               ))}

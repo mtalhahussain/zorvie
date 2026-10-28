@@ -7,11 +7,11 @@ import {
   Group, Ungroup, ArrowUpToLine, ArrowDownToLine, BringToFront, SendToBack,
   AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
   AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd,
-  FlipHorizontal, FlipVertical, Sun, Contrast, Palette, RotateCcw, Replace, Lock, LockOpen,
-  Layers, SquareDashed, Crop, Spline, Table2, Rows3, Columns3, Trash, Upload, ExternalLink,
+  FlipHorizontal, FlipVertical, Sun, Palette, RotateCcw, Replace, Lock, LockOpen,
+  Layers, SquareDashed, Crop, Spline, Table2, Rows3, Columns3, Upload, ExternalLink, PenLine,
 } from 'lucide-react'
 import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
-import type { EmbedElement, FrameElement, ImageElement, LineElement, ShapeElement, StickerElement, TableElement, TextElement, AnyElement, FrameShape } from '@/lib/types'
+import type { EmbedElement, FrameElement, ImageElement, LineElement, ShapeElement, StickerElement, StrokeElement, TableElement, TextElement, AnyElement, FrameShape, GradientFill } from '@/lib/types'
 import { FRAME_SHAPES, isGroup } from '@/lib/types'
 import { TEXT_EFFECTS } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -19,6 +19,40 @@ import { FontDropdown } from './toolbar/FontDropdown'
 import { ColorMenu } from './toolbar/ColorMenu'
 import { ToolbarPopover, SliderRow, IconTile } from './toolbar/popover-kit'
 import { BgRemoverButton, MagicEraserPopover, EnhanceButton } from './ImageAI'
+
+/**
+ * Live-edit gestures (slider drags, typed values, colour spectrum) must snapshot
+ * history BEFORE the first live change — the store's `updateElements` pushes the
+ * snapshot first, so calling it at the end of a gesture would record the
+ * already-changed state and make Undo a no-op. One gesture = one undo step.
+ */
+let liveGestureKey: string | null = null
+function liveUpdate(ids: string[], patch: Record<string, unknown>) {
+  const s = useEditorStore.getState()
+  // keyed by target + history depth: an undo or any other action in between starts a new step
+  if (liveGestureKey !== `${ids.join(',')}|${s.past.length}`) {
+    s.pushHistory()
+    liveGestureKey = `${ids.join(',')}|${useEditorStore.getState().past.length}`
+  }
+  s.updateElementsLive(ids, patch)
+}
+/** end the current live gesture (no extra history entry) */
+function endLive() {
+  liveGestureKey = null
+}
+/** apply a committed change: folds into a running live gesture, otherwise its own undo step */
+function commitUpdate(ids: string[], patch: Record<string, unknown>) {
+  if (liveGestureKey === `${ids.join(',')}|${useEditorStore.getState().past.length}`) {
+    useEditorStore.getState().updateElementsLive(ids, patch)
+    endLive()
+  } else {
+    endLive()
+    useEditorStore.getState().updateElements(ids, patch)
+  }
+}
+/** ColorMenu-style (value, committed) handler */
+const colorHandler = (ids: string[], patchFor: (c: string) => Record<string, unknown>) =>
+  (c: string, committed: boolean) => (committed ? commitUpdate(ids, patchFor(c)) : liveUpdate(ids, patchFor(c)))
 
 const ALIGN_ICONS = {
   left: AlignLeft,
@@ -47,8 +81,13 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
   if (sel.length === 0) return null
 
   const ids = sel.map((e) => e.id)
-  const update = state.updateElements
-  const updateLive = state.updateElementsLive
+  const update = (i: string[], patch: Record<string, unknown>) => { endLive(); state.updateElements(i, patch) }
+  const updateLive = liveUpdate
+  const gradientHandler = (g: GradientFill | null, committed: boolean) => {
+    const patch = g ? { fillGradient: g, fill: g.from } : { fillGradient: null }
+    if (committed) commitUpdate(ids, patch)
+    else liveUpdate(ids, patch)
+  }
 
   const first = sel[0]
   const isMulti = sel.length > 1
@@ -61,6 +100,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
   const table = first.type === 'table' ? (first as TableElement) : null
   const frame = first.type === 'frame' ? (first as FrameElement) : null
   const embed = first.type === 'embed' ? (first as EmbedElement) : null
+  const drawing = first.type === 'stroke' ? (first as StrokeElement) : null
 
   const canGroup = isMulti
   const canUngroup = sel.some((e) => isGroup(e))
@@ -104,16 +144,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             <TBtn onClick={() => update(ids, { fontSize: Math.max(6, text.fontSize - 2) })} title="Decrease font size" ariaLabel="Decrease font size" className="!rounded-r-none">
               <Minus size={14} />
             </TBtn>
-            <input
-              type="number"
-              value={Math.round(text.fontSize)}
-              min={6}
-              max={400}
-              onChange={(e) => { const v = Number(e.target.value); if (v >= 6 && v <= 400) updateLive(ids, { fontSize: v }) }}
-              onBlur={() => update(ids, { fontSize: text.fontSize })}
-              className="h-8 w-10 bg-white/[0.06] border-y border-white/10 text-white text-[12px] text-center outline-none focus:border-[#7630D7] [color-scheme:dark]"
-              aria-label="Font size"
-            />
+            <FontSizeInput ids={ids} value={text.fontSize} />
             <TBtn onClick={() => update(ids, { fontSize: Math.min(400, text.fontSize + 2) })} title="Increase font size" ariaLabel="Increase font size" className="!rounded-l-none">
               <Plus size={14} />
             </TBtn>
@@ -122,8 +153,8 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           <ColorMenu
             value={text.fill}
             gradient={text.fillGradient ?? null}
-            onChange={(c, committed) => committed ? update(ids, { fill: c, fillGradient: null }) : updateLive(ids, { fill: c, fillGradient: null })}
-            onGradient={(g, committed) => { const patch = g ? { fillGradient: g, fill: g.from } : { fillGradient: null }; if (committed) update(ids, patch); else updateLive(ids, patch) }}
+            onChange={colorHandler(ids, (c) => ({ fill: c, fillGradient: null }))}
+            onGradient={gradientHandler}
             title="Text colour"
           />
 
@@ -175,8 +206,8 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               </button>
             )}
           >
-            <SliderRow label="Letter spacing" value={text.letterSpacing} min={-10} max={80} step={1} onChange={(v) => updateLive(ids, { letterSpacing: v })} onCommit={() => update(ids, { letterSpacing: text.letterSpacing })} />
-            <SliderRow label="Line spacing" value={text.lineHeight} min={0.6} max={3} step={0.05} onChange={(v) => updateLive(ids, { lineHeight: v })} onCommit={() => update(ids, { lineHeight: text.lineHeight })} format={(v) => `${v.toFixed(2)}×`} />
+            <SliderRow label="Letter spacing" value={text.letterSpacing} min={-10} max={80} step={1} onChange={(v) => updateLive(ids, { letterSpacing: v })} onCommit={endLive} />
+            <SliderRow label="Line spacing" value={text.lineHeight} min={0.6} max={3} step={0.05} onChange={(v) => updateLive(ids, { lineHeight: v })} onCommit={endLive} format={(v) => `${v.toFixed(2)}×`} />
           </ToolbarPopover>
 
           {/* v0.6: curved text (canva “Curve”) */}
@@ -192,7 +223,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               <div className="text-[12px] font-bold text-white/90">Curved text</div>
               <button className="text-[11px] text-white/60 hover:text-white" onClick={() => update(ids, { curve: 0 })}>Reset</button>
             </div>
-            <SliderRow label="Curve" value={text.curve ?? 0} min={-180} max={180} step={5} onChange={(v) => updateLive(ids, { curve: v })} onCommit={() => update(ids, { curve: text.curve ?? 0 })} format={(v) => `${v}°`} />
+            <SliderRow label="Curve" value={text.curve ?? 0} min={-180} max={180} step={5} onChange={(v) => updateLive(ids, { curve: v })} onCommit={endLive} format={(v) => `${v}°`} />
             <div className="flex justify-center pt-1.5">
               <span className="text-[15px] text-white/85" style={{ fontFamily: text.fontFamily, color: text.fill }} aria-hidden="true">
                 {(text.curve ?? 0) >= 0 ? '◠' : '◡'} Curved preview
@@ -210,7 +241,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           >
             <SliderRow label="Transparency" value={Math.round(text.opacity * 100)} min={0} max={100} step={1}
               onChange={(v) => updateLive(ids, { opacity: v / 100 })}
-              onCommit={() => update(ids, { opacity: text.opacity })}
+              onCommit={endLive}
               format={(v) => `${100 - v}% transparent`} />
           </ToolbarPopover>
 
@@ -259,8 +290,8 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
               <ColorMenu
                 value={shape.fill}
                 gradient={shape.fillGradient ?? null}
-                onChange={(c, committed) => committed ? update(ids, { fill: c, fillGradient: null }) : updateLive(ids, { fill: c, fillGradient: null })}
-                onGradient={(g, committed) => { const patch = g ? { fillGradient: g, fill: g.from } : { fillGradient: null }; if (committed) update(ids, patch); else updateLive(ids, patch) }}
+                onChange={colorHandler(ids, (c) => ({ fill: c, fillGradient: null }))}
+                onGradient={gradientHandler}
                 title="Fill"
               />
               {/* border colour + width */}
@@ -272,22 +303,24 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
                 <div className="text-[12px] font-bold text-white/90 mb-2">Border</div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-[11px] text-white/60">Colour</span>
-                  <ColorMenu value={shape.stroke === 'transparent' ? '#FFFFFF' : shape.stroke} onChange={(c, committed) => committed ? update(ids, { stroke: c, strokeWidth: shape.strokeWidth || 4 }) : updateLive(ids, { stroke: c, strokeWidth: shape.strokeWidth || 4 })} title="Border colour" />
+                  <ColorMenu value={shape.stroke === 'transparent' ? '#FFFFFF' : shape.stroke} onChange={colorHandler(ids, (c) => ({ stroke: c, strokeWidth: shape.strokeWidth || 4 }))} title="Border colour" />
                 </div>
-                <SliderRow label="Width" value={shape.strokeWidth} min={0} max={40} step={1} onChange={(v) => updateLive(ids, { strokeWidth: v })} onCommit={() => update(ids, { strokeWidth: shape.strokeWidth })} />
-                {shape.type === 'rect' && <SliderRow label="Corner radius" value={shape.cornerRadius} min={0} max={Math.round(shape.width / 2)} step={1} onChange={(v) => updateLive(ids, { cornerRadius: v })} onCommit={() => update(ids, { cornerRadius: shape.cornerRadius })} />}
+                <SliderRow label="Width" value={shape.strokeWidth} min={0} max={40} step={1}
+                  onChange={(v) => updateLive(ids, v > 0 && (!shape.stroke || shape.stroke === 'transparent') ? { strokeWidth: v, stroke: '#1F2226' } : { strokeWidth: v })}
+                  onCommit={endLive} />
+                {shape.type === 'rect' && <SliderRow label="Corner radius" value={shape.cornerRadius} min={0} max={Math.round(shape.width / 2)} step={1} onChange={(v) => updateLive(ids, { cornerRadius: v })} onCommit={endLive} />}
               </ToolbarPopover>
             </>
           )}
           {line && (
             <>
-              <ColorMenu value={line.stroke} onChange={(c, committed) => committed ? update(ids, { stroke: c }) : updateLive(ids, { stroke: c })} title="Line colour" />
+              <ColorMenu value={line.stroke} onChange={colorHandler(ids, (c) => ({ stroke: c }))} title="Line colour" />
               <ToolbarPopover trigger={(open) => (
                 <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Line style" title="Line style">
                   <Minus size={14} /> <span className="text-[12px] hidden lg:inline">Style</span>
                 </button>
               )}>
-                <SliderRow label="Thickness" value={line.strokeWidth} min={1} max={40} step={1} onChange={(v) => updateLive(ids, { strokeWidth: v })} onCommit={() => update(ids, { strokeWidth: line.strokeWidth })} />
+                <SliderRow label="Thickness" value={line.strokeWidth} min={1} max={40} step={1} onChange={(v) => updateLive(ids, { strokeWidth: v })} onCommit={endLive} />
                 <label className="flex items-center justify-between text-[12px] text-white/80 mb-2.5 cursor-pointer">
                   Dashed
                   <input type="checkbox" checked={line.dashed} onChange={(e) => update(ids, { dashed: e.target.checked })} className="accent-[#7630D7]" />
@@ -300,7 +333,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
             </>
           )}
           {sticker && (
-            <SliderRowMini label="Size" value={sticker.fontSize} min={24} max={320} onChange={(v) => updateLive(ids, { fontSize: v, width: v * 1.3, height: v * 1.3 })} onCommit={() => update(ids, { fontSize: sticker.fontSize })} />
+            <SliderRowMini label="Size" value={sticker.fontSize} min={24} max={320} onChange={(v) => updateLive(ids, { fontSize: v, width: v * 1.3, height: v * 1.3 })} onCommit={endLive} />
           )}
           {group && (
             <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5">
@@ -314,7 +347,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           )}>
             <SliderRow label="Transparency" value={Math.round(first.opacity * 100)} min={0} max={100} step={1}
               onChange={(v) => updateLive(ids, { opacity: v / 100 })}
-              onCommit={() => update(ids, { opacity: first.opacity })}
+              onCommit={endLive}
               format={(v) => `${100 - v}% transparent`} />
           </ToolbarPopover>
           <Divider />
@@ -331,7 +364,6 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           <MagicEraserPopover el={image} />
           <EnhanceButton el={image} />
           <Divider />
-          <ColorMenu value="#FFFFFF" onChange={() => undefined} title="Filter tint (soon)" />
           <ToolbarPopover trigger={(open) => (
             <button className="cv-tbtn" data-active={open} aria-label="Transparency" title="Transparency">
               <Percent size={14} />
@@ -339,7 +371,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           )}>
             <SliderRow label="Transparency" value={Math.round(image.opacity * 100)} min={0} max={100} step={1}
               onChange={(v) => updateLive(ids, { opacity: v / 100 })}
-              onCommit={() => update(ids, { opacity: image.opacity })}
+              onCommit={endLive}
               format={(v) => `${100 - v}% transparent`} />
           </ToolbarPopover>
           <Divider />
@@ -368,7 +400,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5 capitalize">
             <ExternalLink size={13} /> {embed.kind} card
           </span>
-          <EmbedToolbar embed={embed} ids={ids} />
+          <EmbedToolbar key={embed.id} embed={embed} ids={ids} />
           <ToolbarPopover trigger={(open) => (
             <button className="cv-tbtn" data-active={open} aria-label="Transparency" title="Transparency">
               <Percent size={14} />
@@ -376,14 +408,100 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
           )}>
             <SliderRow label="Transparency" value={Math.round(embed.opacity * 100)} min={0} max={100} step={1}
               onChange={(v) => updateLive(ids, { opacity: v / 100 })}
-              onCommit={() => update(ids, { opacity: embed.opacity })}
+              onCommit={endLive}
+              format={(v) => `${100 - v}% transparent`} />
+          </ToolbarPopover>
+          <Divider />
+          <PositionPopover ids={ids} count={1} element={first} />
+        </>
+      ) : drawing ? (
+        <>
+          <span className="text-[12px] font-semibold text-white/85 px-2 shrink-0 flex items-center gap-1.5">
+            <PenLine size={13} /> Drawing
+          </span>
+          <ColorMenu value={drawing.stroke} onChange={colorHandler(ids, (c) => ({ stroke: c }))} title="Pen colour" />
+          <ToolbarPopover trigger={(open) => (
+            <button className="cv-tbtn gap-1 !px-2.5" data-active={open} aria-label="Pen thickness" title="Pen thickness">
+              <Minus size={14} /> <span className="text-[12px] hidden lg:inline">Thickness</span>
+            </button>
+          )}>
+            <SliderRow label="Thickness" value={drawing.strokeWidth} min={1} max={60} step={1} onChange={(v) => updateLive(ids, { strokeWidth: v })} onCommit={endLive} />
+          </ToolbarPopover>
+          <ToolbarPopover trigger={(open) => (
+            <button className="cv-tbtn" data-active={open} aria-label="Transparency" title="Transparency">
+              <Percent size={14} />
+            </button>
+          )}>
+            <SliderRow label="Transparency" value={Math.round(drawing.opacity * 100)} min={0} max={100} step={1}
+              onChange={(v) => updateLive(ids, { opacity: v / 100 })}
+              onCommit={endLive}
               format={(v) => `${100 - v}% transparent`} />
           </ToolbarPopover>
           <Divider />
           <PositionPopover ids={ids} count={1} element={first} />
         </>
       ) : null}
+
+      {/* common single-selection actions: lock / duplicate / delete */}
+      {!isMulti && (
+        <>
+          <Divider />
+          <TBtn
+            onClick={() => state.setLock(ids, !first.locked)}
+            dataActive={!!first.locked}
+            title={first.locked ? 'Unlock (Ctrl+L)' : 'Lock (Ctrl+L)'}
+            ariaLabel={first.locked ? 'Unlock' : 'Lock'}
+          >
+            {first.locked ? <Lock size={14} /> : <LockOpen size={14} />}
+          </TBtn>
+          <TBtn onClick={() => state.duplicateSelection()} title="Duplicate (Ctrl+D)" ariaLabel="Duplicate">
+            <CopyPlus size={15} />
+          </TBtn>
+          <TBtn onClick={() => state.deleteSelection()} title="Delete (Del)" ariaLabel="Delete" danger>
+            <Trash2 size={15} />
+          </TBtn>
+        </>
+      )}
     </div>
+  )
+}
+
+/** font size field: free typing (draft), live preview for valid sizes, one undo step per edit */
+function FontSizeInput({ ids, value }: { ids: string[]; value: number }) {
+  const shown = String(Math.round(value))
+  const [draft, setDraft] = useState(shown)
+  const [editing, setEditing] = useState(false)
+  if (!editing && draft !== shown) setDraft(shown)
+  const commit = () => {
+    setEditing(false)
+    const n = Number(draft)
+    if (draft.trim() !== '' && !Number.isNaN(n)) {
+      const v = Math.min(400, Math.max(6, Math.round(n)))
+      if (v !== Math.round(value)) commitUpdate(ids, { fontSize: v })
+      else endLive()
+      setDraft(String(v))
+    } else {
+      endLive()
+      setDraft(shown)
+    }
+  }
+  return (
+    <input
+      type="number"
+      value={editing ? draft : shown}
+      min={6}
+      max={400}
+      onFocus={() => { setEditing(true); setDraft(shown) }}
+      onChange={(e) => {
+        setDraft(e.target.value)
+        const v = Number(e.target.value)
+        if (e.target.value.trim() !== '' && v >= 6 && v <= 400) liveUpdate(ids, { fontSize: v })
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      className="h-8 w-10 bg-white/[0.06] border-y border-white/10 text-white text-[12px] text-center outline-none focus:border-[#7630D7] [color-scheme:dark]"
+      aria-label="Font size"
+    />
   )
 }
 
@@ -391,7 +509,7 @@ export function ContextToolbar({ variant = 'topbar' }: { variant?: 'topbar' | 'm
 
 function TableToolbar({ table, ids }: { table: TableElement; ids: string[] }) {
   const update = useEditorStore((s) => s.updateElements)
-  const updateLive = useEditorStore((s) => s.updateElementsLive)
+  const updateLive = liveUpdate
 
   const addRow = () => {
     const cells = [...table.cells]
@@ -420,7 +538,9 @@ function TableToolbar({ table, ids }: { table: TableElement; ids: string[] }) {
     for (let r = 0; r < table.rows; r += 1) {
       for (let c = 0; c < table.cols - 1; c += 1) cells.push(table.cells[r * table.cols + c] ?? { text: '' })
     }
-    update(ids, { cols: table.cols - 1, cells, colWidths: table.colWidths.slice(0, -1) })
+    const sum = table.colWidths.reduce((a, b) => a + b, 0) || 1
+    const removed = Math.round(table.width * ((table.colWidths[table.cols - 1] ?? 0) / sum))
+    update(ids, { cols: table.cols - 1, cells, colWidths: table.colWidths.slice(0, -1), width: Math.max(20, table.width - removed) })
   }
 
   return (
@@ -437,14 +557,14 @@ function TableToolbar({ table, ids }: { table: TableElement; ids: string[] }) {
         <div className="text-[12px] font-bold text-white/90 mb-2">Table style</div>
         <div className="flex items-center gap-2 mb-2">
           <span className="text-[11px] text-white/60">Border</span>
-          <ColorMenu value={table.borderColor} onChange={(c, committed) => committed ? update(ids, { borderColor: c }) : updateLive(ids, { borderColor: c })} title="Border colour" />
+          <ColorMenu value={table.borderColor} onChange={colorHandler(ids, (c) => ({ borderColor: c }))} title="Border colour" />
         </div>
         <div className="flex items-center gap-2 mb-2">
           <span className="text-[11px] text-white/60">Header</span>
-          <ColorMenu value={table.headerFill} onChange={(c, committed) => committed ? update(ids, { headerFill: c }) : updateLive(ids, { headerFill: c })} title="Header fill" />
+          <ColorMenu value={table.headerFill} onChange={colorHandler(ids, (c) => ({ headerFill: c }))} title="Header fill" />
         </div>
-        <SliderRow label="Border width" value={table.borderWidth} min={0} max={6} step={0.5} onChange={(v) => updateLive(ids, { borderWidth: v })} onCommit={() => update(ids, { borderWidth: table.borderWidth })} />
-        <SliderRow label="Text size" value={table.fontSize} min={8} max={40} step={1} onChange={(v) => updateLive(ids, { fontSize: v })} onCommit={() => update(ids, { fontSize: table.fontSize })} />
+        <SliderRow label="Border width" value={table.borderWidth} min={0} max={6} step={0.5} onChange={(v) => updateLive(ids, { borderWidth: v })} onCommit={endLive} />
+        <SliderRow label="Text size" value={table.fontSize} min={8} max={40} step={1} onChange={(v) => updateLive(ids, { fontSize: v })} onCommit={endLive} />
       </ToolbarPopover>
     </>
   )
@@ -496,7 +616,7 @@ function FrameToolbar({ frame, ids }: { frame: FrameElement; ids: string[] }) {
         </div>
         {frame.frameShape === 'rect' && (
           <div className="mt-2 border-t border-white/[0.08] pt-2">
-            <SliderRow label="Corner radius" value={frame.radius} min={0} max={Math.round(frame.width / 2)} step={1} onChange={(v) => useEditorStore.getState().updateElementsLive(ids, { radius: v })} onCommit={() => update(ids, { radius: frame.radius })} />
+            <SliderRow label="Corner radius" value={frame.radius} min={0} max={Math.round(frame.width / 2)} step={1} onChange={(v) => liveUpdate(ids, { radius: v })} onCommit={endLive} />
           </div>
         )}
       </ToolbarPopover>
@@ -559,10 +679,10 @@ function PositionPopover({ ids, count, element }: { ids: string[]; count: number
     >
       {/* arrange 2×2 */}
       <div className="grid grid-cols-2 gap-1 mb-2.5">
-        <IconTile icon={<ArrowUpToLine size={15} />} label="Forward" onClick={() => ids.forEach((id) => store.moveLayer(id, 'up'))} />
-        <IconTile icon={<ArrowDownToLine size={15} />} label="Backward" onClick={() => ids.forEach((id) => store.moveLayer(id, 'down'))} />
-        <IconTile icon={<BringToFront size={15} />} label="To front" onClick={() => ids.forEach((id) => store.moveLayer(id, 'front'))} />
-        <IconTile icon={<SendToBack size={15} />} label="To back" onClick={() => ids.forEach((id) => store.moveLayer(id, 'back'))} />
+        <IconTile icon={<ArrowUpToLine size={15} />} label="Forward" onClick={() => store.moveLayers(ids, 'up')} />
+        <IconTile icon={<ArrowDownToLine size={15} />} label="Backward" onClick={() => store.moveLayers(ids, 'down')} />
+        <IconTile icon={<BringToFront size={15} />} label="To front" onClick={() => store.moveLayers(ids, 'front')} />
+        <IconTile icon={<SendToBack size={15} />} label="To back" onClick={() => store.moveLayers(ids, 'back')} />
       </div>
 
       <div className="border-t border-white/[0.08] pt-2 mb-2.5">
@@ -581,8 +701,8 @@ function PositionPopover({ ids, count, element }: { ids: string[]; count: number
         <div className="border-t border-white/[0.08] pt-2">
           <div className="text-[10px] font-semibold text-white/45 uppercase tracking-wide mb-1.5">Advanced</div>
           <div className="grid grid-cols-3 gap-1.5 mb-1.5">
-            <NumField label="W" value={W} onCommit={(v) => setSize(ratio ? v * (H / W) : v, ratio ? v * (H / W) : H)} />
-            <NumField label="H" value={H} onCommit={(v) => setSize(ratio ? v * (W / H) : W, ratio ? v * (W / H) : v)} />
+            <NumField label="W" value={W} onCommit={(v) => { if (v !== W) setSize(v, ratio && W ? v * (H / W) : H) }} />
+            <NumField label="H" value={H} onCommit={(v) => { if (v !== H) setSize(ratio && H ? v * (W / H) : W, v) }} />
             <button
               className="flex flex-col items-center justify-center gap-0.5 rounded-lg border border-white/10 text-white/75 hover:bg-white/[0.09] text-[10px] font-medium py-1"
               onClick={() => setRatio(!ratio)}
@@ -593,9 +713,9 @@ function PositionPopover({ ids, count, element }: { ids: string[]; count: number
             </button>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
-            <NumField label="X" value={Math.round(el.x)} onCommit={(v) => store.updateElements(ids, { x: Math.round(v) })} />
-            <NumField label="Y" value={Math.round(el.y)} onCommit={(v) => store.updateElements(ids, { y: Math.round(v) })} />
-            <NumField label="Rotate" value={Math.round(el.rotation)} suffix="°" onCommit={(v) => store.updateElements(ids, { rotation: ((v % 360) + 360) % 360 })} />
+            <NumField label="X" value={Math.round(el.x)} onCommit={(v) => { if (Math.round(v) !== Math.round(el.x)) store.moveElementsTo(ids.map((id) => ({ id, x: Math.round(v), y: el.y }))) }} />
+            <NumField label="Y" value={Math.round(el.y)} onCommit={(v) => { if (Math.round(v) !== Math.round(el.y)) store.moveElementsTo(ids.map((id) => ({ id, x: el.x, y: Math.round(v) }))) }} />
+            <NumField label="Rotate" value={Math.round(el.rotation)} suffix="°" onCommit={(v) => { const r = ((v % 360) + 360) % 360; if (r !== Math.round(el.rotation)) store.updateElements(ids, { rotation: r }) }} />
           </div>
         </div>
       )}
@@ -606,7 +726,7 @@ function PositionPopover({ ids, count, element }: { ids: string[]; count: number
 /** image adjustments popover (canva "Edit image" lite) */
 function ImageAdjustPopover({ el, ids }: { el: ImageElement; ids: string[] }) {
   const update = useEditorStore((s) => s.updateElements)
-  const updateLive = useEditorStore((s) => s.updateElementsLive)
+  const updateLive = liveUpdate
   return (
     <ToolbarPopover
       width={252}
@@ -616,14 +736,14 @@ function ImageAdjustPopover({ el, ids }: { el: ImageElement; ids: string[] }) {
         </button>
       )}
     >
-      <SliderRow label="Brightness" value={el.brightness ?? 0} min={-100} max={100} step={1} onChange={(v) => updateLive(ids, { brightness: v })} onCommit={() => update(ids, { brightness: el.brightness ?? 0 })} />
-      <SliderRow label="Contrast" value={el.contrast ?? 0} min={-100} max={100} step={1} onChange={(v) => updateLive(ids, { contrast: v })} onCommit={() => update(ids, { contrast: el.contrast ?? 0 })} />
-      <SliderRow label="Saturation" value={el.saturation ?? 0} min={-100} max={100} step={1} onChange={(v) => updateLive(ids, { saturation: v })} onCommit={() => update(ids, { saturation: el.saturation ?? 0 })} />
+      <SliderRow label="Brightness" value={el.brightness ?? 0} min={-100} max={100} step={1} onChange={(v) => updateLive(ids, { brightness: v })} onCommit={endLive} />
+      <SliderRow label="Contrast" value={el.contrast ?? 0} min={-100} max={100} step={1} onChange={(v) => updateLive(ids, { contrast: v })} onCommit={endLive} />
+      <SliderRow label="Saturation" value={el.saturation ?? 0} min={-100} max={100} step={1} onChange={(v) => updateLive(ids, { saturation: v })} onCommit={endLive} />
       <div className="flex gap-1.5 mt-1 border-t border-white/[0.08] pt-2.5">
         <TBtn onClick={() => update(ids, { flipH: !el.flipH })} dataActive={el.flipH} title="Flip horizontal" ariaLabel="Flip horizontal"><FlipHorizontal size={14} /></TBtn>
         <TBtn onClick={() => update(ids, { flipV: !el.flipV })} dataActive={el.flipV} title="Flip vertical" ariaLabel="Flip vertical"><FlipVertical size={14} /></TBtn>
-        <TBtn onClick={() => update(ids, { brightness: 0, contrast: 0, saturation: 0 })} title="Reset adjustments" ariaLabel="Reset adjustments"><RotateCcw size={14} /></TBtn>
-        <TBtn onClick={() => useEditorStore.getState().setPanel('uploads')} title="Replace image" ariaLabel="Replace image"><Replace size={14} /></TBtn>
+        <TBtn onClick={() => { if (el.brightness || el.contrast || el.saturation) update(ids, { brightness: 0, contrast: 0, saturation: 0 }) }} title="Reset adjustments" ariaLabel="Reset adjustments"><RotateCcw size={14} /></TBtn>
+        <TBtn onClick={() => { const s = useEditorStore.getState(); if (s.panel !== 'uploads') s.setPanel('uploads') }} title="Replace image (pick a file in Uploads)" ariaLabel="Replace image"><Replace size={14} /></TBtn>
       </div>
     </ToolbarPopover>
   )
@@ -642,6 +762,7 @@ function SliderRowMini({ label, value, min, max, onChange, onCommit }: { label: 
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         onPointerUp={onCommit}
+        onKeyUp={onCommit}
         aria-label={label}
       />
     </div>

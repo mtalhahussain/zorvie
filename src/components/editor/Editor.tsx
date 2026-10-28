@@ -122,10 +122,13 @@ export default function Editor() {
   }, [])
 
   // ── autosave ───────────────────────────────────────────────
+  const failuresRef = useRef(0)
+  /** resolves true when the design was persisted */
   const save = useCallback(
-    async (withThumbnail: boolean) => {
+    async (withThumbnail: boolean): Promise<boolean> => {
       const state = useEditorStore.getState()
-      if (!state.designId || state.saving) return
+      if (!state.designId || state.saving) return false
+      const startVersion = state.version
       state.markSaving()
       try {
         let thumbnail: string | null = null
@@ -137,26 +140,35 @@ export default function Editor() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: state.designName,
+            width: state.width,
+            height: state.height,
             pages: state.pages,
             ...(thumbnail ? { thumbnail } : {}),
           }),
         })
         if (!res.ok) throw new Error('save failed')
-        useEditorStore.getState().markSaved()
+        // edits made while this request was in flight keep the design dirty
+        useEditorStore.getState().markSaved(startVersion)
+        failuresRef.current = 0
+        return true
       } catch (err) {
         console.error('Autosave failed', err)
+        failuresRef.current += 1
         useEditorStore.setState({ saving: false })
+        return false
       }
     },
     []
   )
 
-  // debounced autosave on changes
+  // debounced autosave on changes (re-armed when an in-flight save finishes;
+  // backs off after failures so an offline editor doesn't hammer the API)
   useEffect(() => {
-    if (!dirty || !designId) return
-    const t = setTimeout(() => void save(true), 1600)
+    if (!dirty || !designId || saving) return
+    const delay = Math.min(30000, 1600 * 2 ** failuresRef.current)
+    const t = setTimeout(() => void save(true), delay)
     return () => clearTimeout(t)
-  }, [dirty, designId, version, save])
+  }, [dirty, designId, version, saving, save])
 
   // save when leaving the editor
   useEffect(() => {
@@ -175,15 +187,32 @@ export default function Editor() {
       return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (el as HTMLElement).isContentEditable
     }
 
+    /** a modal (crop, shortcuts, share…) owns the keyboard while open */
+    const inDialog = () => {
+      const el = document.activeElement
+      return !!(el && (el as HTMLElement).closest?.('[role="dialog"], [role="alertdialog"]'))
+    }
+
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
       const state = useEditorStore.getState()
 
+      // the presentation overlay handles its own keys (arrows = next/prev page)
+      if (state.previewOpen) return
       if (e.key === 'Escape') {
+        if (state.tool === 'draw') state.setTool('select')
         state.clearSelection()
         return
       }
-      if (isTyping()) return
+      if (isTyping() || inDialog()) return
+
+      // viewing mode: only non-destructive shortcuts (zoom, copy) apply
+      if (state.editingMode === 'viewing') {
+        if (mod && e.key.toLowerCase() === 'c') state.copySelection()
+        else if (!mod && (e.key === '+' || e.key === '=')) state.zoomIn()
+        else if (!mod && e.key === '-') state.zoomOut()
+        return
+      }
 
       // v0.3.1: Shift+R toggles rulers & guides
       if (!mod && e.shiftKey && e.key.toLowerCase() === 'r') {
@@ -217,8 +246,13 @@ export default function Editor() {
       }
       if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault()
-        void save(true)
-        toast({ title: 'Design saved' })
+        if (state.saving) {
+          toast({ title: 'Saving…' })
+          return
+        }
+        void save(true).then((ok) =>
+          toast(ok ? { title: 'Design saved' } : { title: 'Could not save', description: 'Check your connection — we will keep retrying.', variant: 'destructive' })
+        )
         return
       }
       if (mod && e.key.toLowerCase() === 'd') {
@@ -231,11 +265,12 @@ export default function Editor() {
         return
       }
       if (mod && e.key.toLowerCase() === 'x') {
-        state.copySelection()
-        state.deleteSelection()
+        state.cutSelection()
         return
       }
       if (mod && e.key.toLowerCase() === 'v') {
+        // ignore Ctrl+Shift+V etc. and let the browser handle pasting files/images elsewhere
+        if (e.shiftKey || e.altKey) return
         state.pasteClipboard()
         return
       }
@@ -257,9 +292,11 @@ export default function Editor() {
         state.setLock(state.selectedIds, !hasLocked)
         return
       }
-      if (mod && (e.key === ']' || e.key === '[')) {
+      // e.code: with Shift held, e.key becomes '}' / '{' on most layouts
+      const bracket = e.code === 'BracketRight' || e.key === ']' || e.key === '}' ? ']' : e.code === 'BracketLeft' || e.key === '[' || e.key === '{' ? '[' : null
+      if (mod && bracket) {
         e.preventDefault()
-        for (const id of state.selectedIds) state.moveLayer(id, e.key === ']' ? (e.shiftKey ? 'front' : 'up') : (e.shiftKey ? 'back' : 'down'))
+        state.moveLayers(state.selectedIds, bracket === ']' ? (e.shiftKey ? 'front' : 'up') : (e.shiftKey ? 'back' : 'down'))
         return
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -275,16 +312,11 @@ export default function Editor() {
         const step = e.shiftKey ? 10 : 1
         const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
         const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
-        const patch = {}
-        for (const id of state.selectedIds) {
-          const el = state.pages[state.currentPage].elements.find((el) => el.id === id)
-          if (el) {
-            state.updateElementsLive([id], { x: el.x + dx, y: el.y + dy })
-          }
-        }
-        void patch
+        // undoable, skips locked elements, moves group children along
+        state.nudgeSelection(dx, dy)
         return
       }
+      if (mod) return // leave Ctrl/Cmd + '+'/'-' to the browser
       if (e.key === '+' || e.key === '=') state.zoomIn()
       if (e.key === '-') state.zoomOut()
     }
@@ -315,8 +347,10 @@ export default function Editor() {
         try {
           // v0.6: dropping over a frame fills the frame instead of adding an image
           const { src, w, h } = await readImageFile(file)
-          const pageX = (e.clientX - canvasBridge.pan.x) / canvasBridge.zoom
-          const pageY = (e.clientY - canvasBridge.pan.y) / canvasBridge.zoom
+          // pan is relative to the canvas container, not the window
+          const box = canvasBridge.stage?.container().getBoundingClientRect()
+          const pageX = (e.clientX - (box?.left ?? 0) - canvasBridge.pan.x) / canvasBridge.zoom
+          const pageY = (e.clientY - (box?.top ?? 0) - canvasBridge.pan.y) / canvasBridge.zoom
           if (fillFrameAt(pageX, pageY, src, w, h)) {
             filled += 1
             ok += 1
@@ -359,7 +393,7 @@ export default function Editor() {
 
   return (
     <div className="h-screen w-full flex flex-col bg-[#0F1015] overflow-hidden">
-      <TopBar onSave={() => save(true)} onShortcuts={() => setShortcutsOpen(true)} />
+      <TopBar onSave={async () => { await save(true) }}onShortcuts={() => setShortcutsOpen(true)} />
 
       <div className="flex flex-1 min-h-0">
         {/* desktop rail */}

@@ -8,12 +8,14 @@ import { AppHeader, type AppPanelProps } from './registry'
 import { cn } from '@/lib/utils'
 import { applyDesignAction, describeAction, type DesignAction } from '@/lib/design-actions'
 import { useAICapabilities } from '@/hooks/use-ai-capabilities'
+import { AINotConfiguredNotice, postAI } from './ai-status'
 
 interface Turn {
   role: 'user' | 'assistant'
   content: string
   actions?: DesignAction[]
-  done?: { index: number; msg: string }
+  /** result message per executed action index */
+  done?: Record<number, string>
 }
 
 const SUGGESTIONS = [
@@ -84,6 +86,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const { configured: aiConfigured, loaded: aiLoaded } = useAICapabilities()
   const canUndo = useEditorStore((s) => s.past.length > 0)
+  const aiOff = aiLoaded && !aiConfigured
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -91,19 +94,18 @@ export function AssistantApp({ onClose }: AppPanelProps) {
 
   const send = async (message: string) => {
     const text = message.trim()
-    if (!text || busy) return
+    if (!text || busy || aiOff) return
     setInput('')
     const history = turns.slice(-8).map((t) => ({ role: t.role, content: t.content }))
     setTurns((ts) => [...ts, { role: 'user', content: text }])
     setBusy(true)
     try {
-      const res = await fetch('/api/ai/assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, history, design: buildDesignContext() }),
+      const { ok, data } = await postAI<{ reply?: string; actions?: DesignAction[] }>('/api/ai/assistant', {
+        message: text,
+        history,
+        design: buildDesignContext(),
       })
-      const data = (await res.json()) as { reply?: string; actions?: DesignAction[]; error?: string; code?: string }
-      if (!res.ok || !data.reply) throw new Error(data.error ?? 'The assistant could not answer.')
+      if (!ok || !data.reply) throw new Error(data.error ?? 'The assistant could not answer.')
       setTurns((ts) => [...ts, { role: 'assistant', content: data.reply!, actions: data.actions ?? [] }])
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Something went wrong.'
@@ -121,7 +123,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
     } catch (e) {
       msg = e instanceof Error ? e.message : 'Action failed'
     }
-    setTurns((ts) => ts.map((t, i) => (i === turnIndex ? { ...t, done: { index: actionIndex, msg } } : t)))
+    setTurns((ts) => ts.map((t, i) => (i === turnIndex ? { ...t, done: { ...t.done, [actionIndex]: msg } } : t)))
   }
 
   const empty = turns.length === 0 && !busy
@@ -131,12 +133,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
       <AppHeader icon={Bot} title="Zorvie AI assistant" onClose={onClose} />
 
       {/* AI provider missing — honest notice */}
-      {aiLoaded && !aiConfigured && (
-        <div className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-2.5 text-[11px] text-amber-200/80 mb-2.5">
-          <strong>AI provider not configured.</strong> Design actions, Magic Write and image generation need a server
-          AI provider. Layout balancing and palettes still work locally.
-        </div>
-      )}
+      {aiOff && <AINotConfiguredNotice feature="The Zorvie AI assistant" />}
 
       {/* chat log */}
       <div ref={scrollRef} className="h-[340px] overflow-y-auto cv-scroll rounded-xl border border-white/10 bg-white/[0.03] p-2.5 space-y-2.5 mb-2.5">
@@ -178,7 +175,8 @@ export function AssistantApp({ onClose }: AppPanelProps) {
               {t.actions && t.actions.length > 0 && (
                 <div className="mt-1.5 space-y-1">
                   {t.actions.map((a, j) => {
-                    const done = t.done?.index === j
+                    const doneMsg = t.done?.[j]
+                    const done = doneMsg !== undefined
                     return (
                       <div key={j} className="flex gap-1.5">
                         <button
@@ -192,7 +190,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
                           )}
                         >
                           <Wand2 size={12} className="shrink-0" />
-                          <span className="min-w-0 truncate">{done ? t.done?.msg : describeAction(a)}</span>
+                          <span className="min-w-0 truncate">{done ? doneMsg : describeAction(a)}</span>
                           {!done && <Plus size={11} className="ml-auto shrink-0" />}
                         </button>
                       </div>
@@ -234,7 +232,8 @@ export function AssistantApp({ onClose }: AppPanelProps) {
             <button
               key={s}
               onClick={() => void send(s)}
-              className="block w-full text-left text-[11px] text-white/55 hover:text-white rounded-lg border border-white/[0.07] hover:border-white/20 px-2.5 py-1.5 transition-colors cursor-pointer"
+              disabled={aiOff}
+              className="block w-full text-left text-[11px] text-white/55 hover:text-white rounded-lg border border-white/[0.07] hover:border-white/20 px-2.5 py-1.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-white/55"
             >
               “{s}”
             </button>
@@ -249,7 +248,8 @@ export function AssistantApp({ onClose }: AppPanelProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void send(input)}
-            placeholder="Ask your copilot…"
+            disabled={aiOff}
+            placeholder={aiOff ? 'AI is not configured' : 'Ask your copilot…'}
             maxLength={800}
             className="w-full bg-transparent outline-none text-[12.5px] text-white placeholder:text-white/35 h-10"
             aria-label="Message the Zorvie AI assistant"
@@ -257,7 +257,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
         </div>
         <button
           onClick={() => void send(input)}
-          disabled={busy || !input.trim()}
+          disabled={busy || !input.trim() || aiOff}
           className="w-10 h-10 rounded-xl bg-gradient-to-r from-[#7630D7] to-[#9B6BFF] text-white flex items-center justify-center disabled:opacity-40 hover:brightness-110 transition-all shrink-0"
           aria-label="Send message"
         >

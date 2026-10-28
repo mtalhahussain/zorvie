@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Brush, Eraser, MousePointer2, BringToFront, SendToBack, ArrowUp, ArrowDown, AlignLeft, AlignCenter, AlignRight, AlignVerticalJustifyCenter, AlignHorizontalJustifyCenter, FlipHorizontal2, FlipVertical2, Palette, Layers as LayersIcon } from 'lucide-react'
-import { useEditorStore, selectedElements, currentPageData } from '@/store/editor-store'
+import { useEditorStore, selectedElements } from '@/store/editor-store'
 import { PanelShell } from './panel-shell'
 import { BackgroundPanel } from './BackgroundPanel'
 import { LayersPanel } from './LayersPanel'
@@ -142,11 +142,8 @@ function DrawTab() {
 function PositionTab() {
   const store = useEditorStore()
   const selected = selectedElements(store)
-  const page = currentPageData(store)
   const width = store.width
   const height = store.height
-  const moveLayer = store.moveLayer
-  const updateElements = store.updateElements
 
   if (!selected.length) {
     return (
@@ -167,7 +164,8 @@ function PositionTab() {
       if (mode === 'top') y = 0
       if (mode === 'center-v') y = Math.round((height - el.height) / 2)
       if (mode === 'bottom') y = height - el.height
-      updateElements(ids, { x, y })
+      // moveElementsTo translates, so group children follow the group
+      store.moveElementsTo([{ id: el.id, x, y }])
     } else {
       // align multiple to their bounding box
       const minX = Math.min(...selected.map((e) => e.x))
@@ -184,21 +182,31 @@ function PositionTab() {
         if (mode === 'bottom') y = maxY - el.height
         return { id: el.id, x, y }
       })
-      patches.forEach((p) => updateElements([p.id], { x: p.x, y: p.y }))
+      // one undo step for the whole alignment (group children move too)
+      store.moveElementsTo(patches)
     }
     toast({ title: 'Aligned' })
   }
 
+  // only images can mirror (flipH/flipV) — rotation is not a flip
+  const images = selected.filter((e) => e.type === 'image')
   const flip = (axis: 'x' | 'y') => {
-    if (selected.length !== 1) {
-      toast({ title: 'Flip works on a single element' })
+    if (!images.length) {
+      toast({ title: 'Flip works on images', description: 'Select an image to mirror it.' })
       return
     }
-    const el = selected[0]
-    updateElements([el.id], { rotation: axis === 'x' ? (360 - el.rotation) % 360 : (el.rotation + 180) % 360 })
+    store.pushHistory()
+    for (const im of images) {
+      const cur = im as { flipH?: boolean; flipV?: boolean }
+      store.updateElementsLive([im.id], axis === 'x' ? { flipH: !cur.flipH } : { flipV: !cur.flipV })
+    }
   }
 
-  void page
+  /** arrange every selected element, keeping their relative stacking order */
+  const arrange = (dir: 'up' | 'down' | 'front' | 'back') => {
+    // one undo step; the store keeps the relative order and skips no-op moves
+    store.moveLayers(ids, dir)
+  }
 
   const btn = 'flex-1 h-10 rounded-xl bg-white/[0.05] hover:bg-[#7630D7] text-white flex items-center justify-center transition-colors'
 
@@ -207,10 +215,10 @@ function PositionTab() {
       <div>
         <h4 className="text-xs font-semibold text-white/50 uppercase tracking-wide mb-2">Arrange</h4>
         <div className="grid grid-cols-4 gap-2">
-          <button className={btn} onClick={() => moveLayer(ids[0], 'front')} aria-label="Bring to front" title="Bring to front"><BringToFront size={16} /></button>
-          <button className={btn} onClick={() => moveLayer(ids[0], 'up')} aria-label="Forward" title="Forward"><ArrowUp size={16} /></button>
-          <button className={btn} onClick={() => moveLayer(ids[0], 'down')} aria-label="Backward" title="Backward"><ArrowDown size={16} /></button>
-          <button className={btn} onClick={() => moveLayer(ids[0], 'back')} aria-label="Send to back" title="Send to back"><SendToBack size={16} /></button>
+          <button className={btn} onClick={() => arrange('front')} aria-label="Bring to front" title="Bring to front"><BringToFront size={16} /></button>
+          <button className={btn} onClick={() => arrange('up')} aria-label="Forward" title="Forward"><ArrowUp size={16} /></button>
+          <button className={btn} onClick={() => arrange('down')} aria-label="Backward" title="Backward"><ArrowDown size={16} /></button>
+          <button className={btn} onClick={() => arrange('back')} aria-label="Send to back" title="Send to back"><SendToBack size={16} /></button>
         </div>
       </div>
 

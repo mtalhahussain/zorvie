@@ -24,7 +24,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
-// PUT /api/designs/[id] — save design (name / pages / thumbnail)
+// PUT /api/designs/[id] — save design (name / size / pages / thumbnail)
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
@@ -32,6 +32,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const data: Record<string, unknown> = {}
     if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim().slice(0, 120)
     if (body.pages !== undefined) data.pages = toPages(body.pages)
+    // canvas size (Magic Resize in place / restoring a differently-sized version)
+    for (const key of ['width', 'height'] as const) {
+      const v = body[key]
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 1 && v <= 8000) data[key] = Math.round(v)
+    }
     if (body.thumbnail !== undefined) data.thumbnail = typeof body.thumbnail === 'string' ? body.thumbnail : null
     const design = await db.design.update({ where: { id }, data })
     return NextResponse.json({

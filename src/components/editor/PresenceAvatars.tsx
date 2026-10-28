@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Wifi, WifiOff, Loader2, Pencil } from 'lucide-react'
 import { useEditorStore } from '@/store/editor-store'
 import { getIdentity, setDisplayName } from '@/lib/collab/identity'
+import { getActiveCollabSession } from '@/hooks/use-collab'
 import { cn } from '@/lib/utils'
 import {
   Popover,
@@ -22,8 +23,14 @@ export function PresenceAvatars() {
   const collaborators = useEditorStore((s) => s.collaborators)
   const status = useEditorStore((s) => s.collabStatus)
   const [open, setOpen] = useState(false)
+  // identity lives outside React — keep a copy so a rename re-renders the chips
+  const [me, setMe] = useState(() => getIdentity())
 
-  const me = getIdentity()
+  const onRename = (name: string) => {
+    const next = setDisplayName(name)
+    setMe(next)
+    getActiveCollabSession()?.setName(next.name)
+  }
 
   return (
     <div className="flex items-center gap-2 mr-1">
@@ -88,14 +95,14 @@ export function PresenceAvatars() {
               </div>
             )}
           </div>
-          <NameEditor current={me.name} />
+          <NameEditor current={me.name} onCommit={onRename} />
         </PopoverContent>
       </Popover>
     </div>
   )
 }
 
-function NameEditor({ current }: { current: string }) {
+function NameEditor({ current, onCommit }: { current: string; onCommit: (name: string) => void }) {
   const [name, setName] = useState(current)
   return (
     <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2">
@@ -104,7 +111,10 @@ function NameEditor({ current }: { current: string }) {
         value={name}
         maxLength={40}
         onChange={(e) => setName(e.target.value)}
-        onBlur={() => setDisplayName(name)}
+        onBlur={() => {
+          onCommit(name)
+          if (!name.trim()) setName(current)
+        }}
         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         placeholder="Your display name"
         className="h-8 text-[12px] bg-white/[0.06] border-white/10 text-white placeholder:text-white/30"

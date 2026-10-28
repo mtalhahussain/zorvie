@@ -31,7 +31,13 @@ export function VersionHistoryDialog({ open, onOpenChange }: { open: boolean; on
 
   const [label, setLabel] = useState('')
 
+  const designId = useEditorStore((s) => s.designId)
+
   const save = () => {
+    if (!designId) {
+      toast({ title: 'Save the design first', description: 'Versions are kept per saved design.', variant: 'destructive' })
+      return
+    }
     saveVersion(label)
     toast({ title: 'Version saved', description: label.trim() || undefined })
     setLabel('')
@@ -98,6 +104,8 @@ export function VersionHistoryDialog({ open, onOpenChange }: { open: boolean; on
                 variant="ghost"
                 size="sm"
                 className="h-8 px-3 rounded-lg text-white/85 hover:bg-white/10 hover:text-white text-[12px] font-semibold"
+                disabled={!v.pages.length}
+                title={v.pages.length ? undefined : 'This snapshot has no pages to restore'}
                 onClick={() => {
                   restoreVersion(v.id)
                   toast({ title: `Restored “${v.label}”`, description: 'Ctrl+Z brings your previous state back.' })

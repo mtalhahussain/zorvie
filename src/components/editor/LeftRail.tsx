@@ -22,6 +22,8 @@ const PANELS: { id: Exclude<PanelId, null>; label: string; icon: typeof LayoutTe
 export function LeftRail({ vertical = true }: { vertical?: boolean }) {
   const panel = useEditorStore((s) => s.panel)
   const setPanel = useEditorStore((s) => s.setPanel)
+  const commentsOpen = useEditorStore((s) => s.commentsOpen)
+  const setCommentsOpen = useEditorStore((s) => s.setCommentsOpen)
   void useIsMobile()
 
   return (
@@ -33,11 +35,20 @@ export function LeftRail({ vertical = true }: { vertical?: boolean }) {
       aria-label="Editor tools"
     >
       {PANELS.map((p) => {
-        const active = panel === p.id
+        // the comments panel replaces the tool panel — a rail tab is only "active" when visible
+        const active = panel === p.id && !commentsOpen
         return (
           <Tip key={p.id} label={p.label} side={vertical ? 'right' : 'top'}>
             <button
-              onClick={() => setPanel(p.id)}
+              onClick={() => {
+                if (commentsOpen) {
+                  // leave comments mode and show the chosen panel (instead of toggling it hidden)
+                  setCommentsOpen(false)
+                  if (panel !== p.id) setPanel(p.id)
+                  return
+                }
+                setPanel(p.id)
+              }}
               className={cn(
                 'flex flex-col items-center justify-center gap-1 transition-colors text-white/60 hover:text-white',
                 vertical ? 'w-[72px] h-[72px] rounded-2xl' : 'w-16 h-11 shrink-0 rounded-xl',

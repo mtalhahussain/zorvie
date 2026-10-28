@@ -5,6 +5,7 @@ import { Bot, Copy, Check, Plug, KeyRound, Info } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { toast } from '@/hooks/use-toast'
 
 /**
  * v0.6 — "AI agents (MCP)" dashboard card. Shows the real endpoint status
@@ -45,12 +46,32 @@ export function McpCard() {
   )
 
   const copy = async (what: 'url' | 'config', text: string) => {
+    let ok = false
     try {
       await navigator.clipboard.writeText(text)
+      ok = true
+    } catch {
+      // navigator.clipboard is unavailable on plain-http origins (e.g. a LAN IP):
+      // fall back to a hidden textarea + execCommand('copy')
+      try {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.setAttribute('readonly', '')
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        ok = document.execCommand('copy')
+        document.body.removeChild(ta)
+      } catch {
+        ok = false
+      }
+    }
+    if (ok) {
       setCopied(what)
       setTimeout(() => setCopied(null), 1800)
-    } catch {
-      /* clipboard unavailable */
+    } else {
+      toast({ title: 'Could not copy — select the text and copy it manually', variant: 'destructive' })
     }
   }
 

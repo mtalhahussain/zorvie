@@ -6,6 +6,7 @@ import { useEditorStore } from '@/store/editor-store'
 import {
   buildThreads,
   useCommentsStore,
+  type CommentRecord,
   type CommentThread,
 } from '@/lib/comments-store'
 import { getIdentity } from '@/lib/collab/identity'
@@ -158,10 +159,15 @@ function ThreadCard({
         }),
       })
       if (!res.ok) throw new Error('failed')
+      // optimistic insert — own events are filtered from the collab stream,
+      // so without this the reply would only appear on the next 15 s poll
+      const created = (await res.json()) as CommentRecord
+      useCommentsStore.getState().upsertComment(created)
+      window.dispatchEvent(new CustomEvent('canvix:comments-changed'))
       setReplyText('')
       setReplyOpen(false)
     } catch {
-      toast({ title: 'Could not post the reply.' })
+      toast({ title: 'Could not post the reply.', variant: 'destructive' })
     } finally {
       setBusy(false)
     }
@@ -180,9 +186,12 @@ function ThreadCard({
         // then converge with a fresh fetch (beats any in-flight refetch race)
         useCommentsStore.getState().upsertComment({ ...root, resolved: !root.resolved })
         window.dispatchEvent(new CustomEvent('canvix:comments-changed'))
+      } else {
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        toast({ title: 'Could not update the comment.', description: data.error, variant: 'destructive' })
       }
     } catch {
-      toast({ title: 'Could not update the comment.' })
+      toast({ title: 'Could not update the comment.', variant: 'destructive' })
     }
   }
 
@@ -195,10 +204,14 @@ function ThreadCard({
       )
       if (res.ok) {
         useCommentsStore.getState().removeComment(root.id)
+        if (useCommentsStore.getState().openThreadId === root.id) useCommentsStore.getState().setOpenThreadId(null)
         window.dispatchEvent(new CustomEvent('canvix:comments-changed'))
+      } else {
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        toast({ title: 'Could not delete the comment.', description: data.error, variant: 'destructive' })
       }
     } catch {
-      toast({ title: 'Could not delete the comment.' })
+      toast({ title: 'Could not delete the comment.', variant: 'destructive' })
     }
   }
 
@@ -289,7 +302,10 @@ function ThreadCard({
               <input
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && void addReply()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void addReply()
+                  else if (e.key === 'Escape') setReplyOpen(false)
+                }}
                 placeholder={`Reply to ${root.authorName}…`}
                 maxLength={2000}
                 autoFocus

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, ImageDown, Loader2, Globe } from 'lucide-react'
 import { PanelShell } from './panel-shell'
 import { addImageFromSrc } from '../add-element'
+import { AIImageApp } from '../apps/AIImageApp'
 import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
 
@@ -60,26 +61,41 @@ export function PhotosPanel() {
   // v0.4: live web search (debounced)
   const [webResults, setWebResults] = useState<WebPhoto[] | null>(null)
   const [webBusy, setWebBusy] = useState(false)
+  /** why web search is unavailable (e.g. no AI provider configured) */
+  const [webError, setWebError] = useState<string | null>(null)
   const lastQuery = useRef('')
+  const [generating, setGenerating] = useState(false)
 
   useEffect(() => {
     const q = query.trim()
     const run = async () => {
       if (q.length < 2) {
         setWebResults(null)
+        setWebError(null)
         return
       }
       setWebBusy(true)
+      setWebError(null)
       try {
         const res = await fetch('/api/photos/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: q, count: 24 }),
         })
-        const data = (await res.json()) as { results?: WebPhoto[] }
-        setWebResults(res.ok && Array.isArray(data.results) ? data.results : [])
+        const data = (await res.json().catch(() => ({}))) as { results?: WebPhoto[]; error?: string }
+        if (res.ok && Array.isArray(data.results)) {
+          setWebResults(data.results)
+        } else {
+          setWebResults([])
+          setWebError(
+            res.status === 503
+              ? 'Web photo search needs an AI provider configured on the server. Showing the free library instead.'
+              : data.error ?? 'Web photo search is unavailable right now.'
+          )
+        }
       } catch {
         setWebResults([])
+        setWebError('Web photo search is unavailable right now.')
       } finally {
         setWebBusy(false)
       }
@@ -125,6 +141,7 @@ export function PhotosPanel() {
       subtitle="Search millions of photos or browse the free library"
       searchPlaceholder="Search photos (e.g. mountain, coffee, beach)"
       onSearch={setQuery}
+      onGenerate={() => setGenerating(true)}
       belowSearch={
         <div className="flex gap-1.5 flex-wrap mt-2.5">
           {CATEGORIES.map((c) => (
@@ -145,17 +162,25 @@ export function PhotosPanel() {
         </div>
       }
     >
+      {generating && (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+          <AIImageApp onClose={() => setGenerating(false)} />
+        </div>
+      )}
+
       {/* ── live web results (canva-style photo search) ── */}
       {showWeb && (
         <div className="mb-4">
           <div className="flex items-center gap-1.5 mb-2">
             <Globe size={12} className="text-[#02C0CC]" />
             <span className="text-[10.5px] font-bold text-white/55 uppercase tracking-wide">
-              Web results {webResults ? `(${webResults.length})` : ''}
+              Web results {webResults && !webError ? `(${webResults.length})` : ''}
             </span>
             {webBusy && <Loader2 size={11} className="animate-spin text-white/40 ml-1" />}
           </div>
-          {webResults && webResults.length === 0 && !webBusy ? (
+          {webError && !webBusy ? (
+            <p className="text-[11.5px] text-white/45 py-2 leading-relaxed">{webError}</p>
+          ) : webResults && webResults.length === 0 && !webBusy ? (
             <p className="text-[11.5px] text-white/40 py-2">No web photos matched — try other keywords.</p>
           ) : (
             <div className="grid grid-cols-2 gap-2.5">

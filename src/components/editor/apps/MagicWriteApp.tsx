@@ -8,6 +8,8 @@ import { useEditorStore } from '@/store/editor-store'
 import { AppHeader, type AppPanelProps } from './registry'
 import { cn } from '@/lib/utils'
 import { toast } from '@/hooks/use-toast'
+import { useAICapabilities } from '@/hooks/use-ai-capabilities'
+import { AINotConfiguredNotice, postAI } from './ai-status'
 
 const KINDS = [
   { id: 'headline', label: 'Headline', fontSize: 64, bold: true },
@@ -30,7 +32,8 @@ export function MagicWriteApp({ onClose }: AppPanelProps) {
   const pages = useEditorStore((s) => s.pages)
   const currentPage = useEditorStore((s) => s.currentPage)
   const width = useEditorStore((s) => s.width)
-  const height = useEditorStore((s) => s.height)
+  const ai = useAICapabilities()
+  const aiOff = ai.loaded && !ai.configured
 
   const [prompt, setPrompt] = useState('')
   const [kind, setKind] = useState<(typeof KINDS)[number]['id']>('tagline')
@@ -40,18 +43,13 @@ export function MagicWriteApp({ onClose }: AppPanelProps) {
   const [error, setError] = useState<string | null>(null)
 
   const generate = async () => {
-    if (!prompt.trim() || busy) return
+    if (!prompt.trim() || busy || aiOff) return
     setBusy(true)
     setError(null)
     setOptions([])
     try {
-      const res = await fetch('/api/ai/write', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, kind, tone }),
-      })
-      const data = (await res.json()) as { options?: string[]; error?: string }
-      if (!res.ok || !data.options) throw new Error(data.error ?? 'Generation failed')
+      const { ok, data } = await postAI<{ options?: string[] }>('/api/ai/write', { prompt, kind, tone })
+      if (!ok || !data.options) throw new Error(data.error ?? 'Generation failed')
       setOptions(data.options)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Generation failed')
@@ -62,11 +60,12 @@ export function MagicWriteApp({ onClose }: AppPanelProps) {
 
   const addToCanvas = (text: string) => {
     const preset = KINDS.find((k) => k.id === kind)!
-    const pos = placement(Math.min(width * 0.7, 800), preset.fontSize, pages[currentPage].elements.length)
+    const boxW = Math.round(Math.min(width * 0.72, 820))
+    const pos = placement(boxW, preset.fontSize * 1.6, pages[currentPage].elements.length)
     addElement(
       createTextElement({
         ...pos,
-        width: Math.min(width * 0.72, 820),
+        width: boxW,
         height: preset.fontSize * 1.6,
         text,
         fontSize: preset.fontSize,
@@ -80,6 +79,7 @@ export function MagicWriteApp({ onClose }: AppPanelProps) {
   return (
     <div>
       <AppHeader icon={Wand2} title="Magic Write" onClose={onClose} />
+      {aiOff && <AINotConfiguredNotice feature="Magic Write" />}
 
       <div
         className="rounded-xl border border-white/10 bg-white/[0.04] focus-within:border-[#7630D7] transition-colors p-3 mb-2.5"
@@ -87,7 +87,7 @@ export function MagicWriteApp({ onClose }: AppPanelProps) {
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate() }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void generate() }}
           rows={2}
           maxLength={500}
           placeholder="Describe what you need — e.g. “A poster tagline for a summer music festival”"
@@ -127,8 +127,8 @@ export function MagicWriteApp({ onClose }: AppPanelProps) {
       </div>
 
       <button
-        onClick={generate}
-        disabled={busy || !prompt.trim()}
+        onClick={() => void generate()}
+        disabled={busy || !prompt.trim() || aiOff}
         className="w-full h-10 rounded-xl bg-gradient-to-r from-[#7630D7] to-[#9B6BFF] text-white text-[13px] font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:brightness-110 transition-all"
         aria-label="Generate copy"
       >
@@ -143,7 +143,8 @@ export function MagicWriteApp({ onClose }: AppPanelProps) {
           <div className="flex items-center justify-between">
             <span className="text-[10.5px] font-bold text-white/60 uppercase tracking-wide">Results</span>
             <button
-              onClick={generate}
+              onClick={() => void generate()}
+              disabled={busy || aiOff}
               className="text-[10px] text-white/50 hover:text-white flex items-center gap-1"
               aria-label="Regenerate"
             >

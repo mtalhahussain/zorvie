@@ -83,7 +83,8 @@ export function Dashboard() {
   const goLanding = useAppStore((s) => s.goLanding)
   const openEditor = useAppStore((s) => s.openEditor)
   const loadEditorDesign = useEditorStore((s) => s.loadDesign)
-  const { designs, loading, refresh } = useDesigns()
+  const setEditorPanel = useEditorStore((s) => s.setPanel)
+  const { designs, loading, error: loadError, refresh } = useDesigns()
   const [helpOpen, setHelpOpen] = useState(false)
 
   const [query, setQuery] = useState('')
@@ -95,6 +96,7 @@ export function Dashboard() {
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [foreverTarget, setForeverTarget] = useState<{ id: string; name: string } | null>(null)
   // v0.4: trash + sort
   const [trashOpen, setTrashOpen] = useState(false)
   const [trash, setTrash] = useState<DesignMeta[] | null>(null)
@@ -124,6 +126,7 @@ export function Dashboard() {
   }
 
   const doDeleteForever = async (id: string, name: string) => {
+    setForeverTarget(null)
     try {
       await deleteDesignForever(id)
       await refreshTrash()
@@ -198,11 +201,13 @@ export function Dashboard() {
     }
   }
 
-  const openDesign = async (id: string) => {
+  const openDesign = async (id: string, panel?: 'brand') => {
     try {
       const record = await fetchDesign(id)
       openEditor(record)
       loadEditorDesign(record)
+      // setPanel toggles, so only call it when the panel is not already open
+      if (panel && useEditorStore.getState().panel !== panel) setEditorPanel(panel)
     } catch {
       toast({ title: 'Could not open design', variant: 'destructive' })
     }
@@ -222,8 +227,8 @@ export function Dashboard() {
     setDeleteTarget(null)
     try {
       await deleteDesign(id)
-      await refresh()
-      toast({ title: 'Design deleted' })
+      await Promise.all([refresh(), trash !== null ? refreshTrash() : Promise.resolve()])
+      toast({ title: 'Design moved to Trash' })
     } catch {
       toast({ title: 'Could not delete', variant: 'destructive' })
     }
@@ -231,12 +236,18 @@ export function Dashboard() {
 
   const doRename = async () => {
     if (!renameTarget) return
+    const name = renameValue.trim()
+    if (!name) {
+      toast({ title: 'Name cannot be empty', variant: 'destructive' })
+      return
+    }
     const target = renameTarget
     setRenameTarget(null)
-    if (!renameValue.trim()) return
+    if (name === target.name) return
     try {
-      await renameDesign(target.id, renameValue.trim())
+      await renameDesign(target.id, name)
       await refresh()
+      toast({ title: `Renamed to “${name}”` })
     } catch {
       toast({ title: 'Could not rename', variant: 'destructive' })
     }
@@ -263,7 +274,11 @@ export function Dashboard() {
         ].map((item) => (
           <button
             key={item.label}
-            onClick={() => item.target && document.getElementById(`cv-${item.target}`)?.scrollIntoView({ behavior: 'smooth' })}
+            onClick={() =>
+              item.target
+                ? document.getElementById(`cv-${item.target}`)?.scrollIntoView({ behavior: 'smooth' })
+                : window.scrollTo({ top: 0, behavior: 'smooth' })
+            }
             className={cn(
               'w-14 py-2.5 rounded-2xl flex flex-col items-center gap-1 transition-colors',
               item.active ? 'bg-[#2A2C35] text-white' : 'text-white/60 hover:text-white hover:bg-white/[0.06]'
@@ -328,10 +343,10 @@ export function Dashboard() {
                   <div className="text-[13px] font-semibold">Zorvie creator</div>
                   <div className="text-[11px] text-white/45">Free · open-source · local-first</div>
                 </div>
-                <DropdownMenuItem className="gap-2" onClick={() => setHelpOpen(true)}>
+                <DropdownMenuItem className="gap-2 focus:bg-white/10 focus:text-white" onClick={() => setHelpOpen(true)}>
                   <CircleHelp size={14} /> Help &amp; shortcuts
                 </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2" onClick={goLanding}>
+                <DropdownMenuItem className="gap-2 focus:bg-white/10 focus:text-white" onClick={goLanding}>
                   <Info size={14} /> About Zorvie
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -455,7 +470,7 @@ export function Dashboard() {
               className="rounded-xl border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
               onClick={() => {
                 const first = filteredDesigns[0] ?? null
-                if (first) void openDesign(first.id)
+                if (first) void openDesign(first.id, 'brand')
                 else toast({ title: 'Open a design first, then click the Brand tab' })
               }}
             >
@@ -498,13 +513,36 @@ export function Dashboard() {
                 </div>
               ))}
             </div>
+          ) : loadError && designs === null ? (
+            <div className="mt-6 rounded-2xl border-2 border-dashed border-white/12 p-10 text-center">
+              <p className="font-semibold">Could not load your designs</p>
+              <p className="mt-1 text-sm text-white/45">Check that the database is running, then try again.</p>
+              <Button
+                variant="outline"
+                className="mt-4 rounded-xl border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                onClick={() => void refresh()}
+              >
+                <RotateCcw size={14} className="mr-1.5" /> Retry
+              </Button>
+            </div>
           ) : filteredDesigns.length === 0 ? (
             <div className="mt-6 rounded-2xl border-2 border-dashed border-white/12 p-10 text-center">
               <div className="mx-auto h-14 w-14 rounded-2xl bg-brand-gradient-soft flex items-center justify-center text-[#A78BFA]">
-                <Plus size={24} />
+                {query && designs?.length ? <Search size={24} /> : <Plus size={24} />}
               </div>
-              <p className="mt-4 font-semibold">No designs yet</p>
-              <p className="mt-1 text-sm text-white/45">Pick a preset or template above to get started.</p>
+              {query && designs?.length ? (
+                <>
+                  <p className="mt-4 font-semibold">No designs match “{query}”</p>
+                  <button className="mt-1 text-sm text-[#A78BFA] hover:underline" onClick={() => setQuery('')}>
+                    Clear search
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="mt-4 font-semibold">No designs yet</p>
+                  <p className="mt-1 text-sm text-white/45">Pick a preset or template above to get started.</p>
+                </>
+              )}
             </div>
           ) : (
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -536,16 +574,16 @@ export function Dashboard() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44 bg-[#16181D] border-white/10 text-white">
-                        <DropdownMenuItem onClick={() => openDesign(d.id)}>
-                          <Pencil size={14} className="mr-2" /> Open
+                        <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onClick={() => openDesign(d.id)}>
+                          <FolderOpen size={14} className="mr-2" /> Open
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => { setRenameTarget({ id: d.id, name: d.name }); setRenameValue(d.name) }}>
+                        <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onClick={() => { setRenameTarget({ id: d.id, name: d.name }); setRenameValue(d.name) }}>
                           <Pencil size={14} className="mr-2" /> Rename
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => doDuplicate(d.id)}>
+                        <DropdownMenuItem className="focus:bg-white/10 focus:text-white" onClick={() => doDuplicate(d.id)}>
                           <Copy size={14} className="mr-2" /> Duplicate
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => setDeleteTarget(d.id)}>
+                        <DropdownMenuItem className="text-red-400 focus:bg-red-500/15 focus:text-red-300 [&_svg]:text-red-400" onClick={() => setDeleteTarget(d.id)}>
                           <Trash2 size={14} className="mr-2" /> Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -624,7 +662,7 @@ export function Dashboard() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 rounded-lg text-white/60 hover:bg-red-500/15 hover:text-red-400"
-                            onClick={() => void doDeleteForever(d.id, d.name)}
+                            onClick={() => setForeverTarget({ id: d.id, name: d.name })}
                             aria-label={`Delete ${d.name} forever`}
                             title="Delete forever"
                           >
@@ -721,6 +759,20 @@ export function Dashboard() {
             <DialogTitle>Create a custom design</DialogTitle>
             <DialogDescription className="text-white/55">Pick any pixel size — you can resize later.</DialogDescription>
           </DialogHeader>
+          <form
+            className="grid gap-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const w = parseInt(customW, 10)
+              const h = parseInt(customH, 10)
+              if (!Number.isFinite(w) || !Number.isFinite(h) || w < 40 || h < 40 || w > 8000 || h > 8000) {
+                toast({ title: 'Size must be between 40 and 8000 px', variant: 'destructive' })
+                return
+              }
+              setCustomOpen(false)
+              void startBlank(w, h)
+            }}
+          >
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm font-medium" htmlFor="custom-w">Width (px)</label>
@@ -732,23 +784,12 @@ export function Dashboard() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setCustomOpen(false)}>Cancel</Button>
-            <Button
-              className="btn-cv"
-              onClick={() => {
-                const w = parseInt(customW, 10)
-                const h = parseInt(customH, 10)
-                if (!Number.isFinite(w) || !Number.isFinite(h) || w < 40 || h < 40 || w > 8000 || h > 8000) {
-                  toast({ title: 'Size must be between 40 and 8000 px', variant: 'destructive' })
-                  return
-                }
-                setCustomOpen(false)
-                void startBlank(w, h)
-              }}
-            >
+            <Button type="button" variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setCustomOpen(false)}>Cancel</Button>
+            <Button type="submit" className="btn-cv" disabled={creating}>
               Create
             </Button>
           </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -778,6 +819,22 @@ export function Dashboard() {
           <DialogFooter>
             <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button variant="destructive" onClick={() => deleteTarget && doDelete(deleteTarget)}>Move to Trash</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete forever confirm dialog (from Trash, cannot be undone) ── */}
+      <Dialog open={!!foreverTarget} onOpenChange={(open) => !open && setForeverTarget(null)}>
+        <DialogContent className="rounded-[28px] sm:max-w-sm bg-[#16181D] border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle>Delete forever?</DialogTitle>
+            <DialogDescription className="text-white/55">
+              “{foreverTarget?.name}” and its version history will be permanently deleted. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" className="border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => setForeverTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => foreverTarget && doDeleteForever(foreverTarget.id, foreverTarget.name)}>Delete forever</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

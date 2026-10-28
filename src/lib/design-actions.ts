@@ -59,10 +59,20 @@ function currentPageElements(): AnyElement[] {
   return s.pages[s.currentPage]?.elements ?? []
 }
 
+/** Valid target ids: top-level elements of the current page only — the store's
+ *  element ops (`updateElements`, `deleteSelection`, `alignElements`) act on
+ *  the current page's top level, so group-child ids would be silent no-ops. */
 function resolveIds(ids: string[] | undefined): string[] {
-  const page = currentPageElements()
-  const valid = new Set(flatElements(page).map((e) => e.id))
+  const valid = new Set(currentPageElements().map((e) => e.id))
   return (ids ?? []).filter((id) => typeof id === 'string' && valid.has(id))
+}
+
+/** Apply per-element patches as ONE undo step (one history entry). */
+function updateMany(entries: [string, Record<string, unknown>][]): void {
+  if (!entries.length) return
+  const store = useEditorStore.getState()
+  store.pushHistory()
+  for (const [id, patch] of entries) useEditorStore.getState().updateElementsLive([id], patch)
 }
 
 /** Execute one action. Returns a human-readable result message. */
@@ -137,13 +147,10 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
       const dy = Number.isFinite(Number(action.dy)) ? Number(action.dy) : 0
       if (!dx && !dy) return 'Nothing to move'
       const page = currentPageElements()
-      const patchPerId = new Map<string, { x: number; y: number }>()
-      for (const el of page) {
-        if (ids.includes(el.id)) patchPerId.set(el.id, { x: el.x + dx, y: el.y + dy })
-      }
-      for (const [id, patch] of patchPerId) {
-        useEditorStore.getState().updateElements([id], patch)
-      }
+      // moveElementsTo translates, so group children follow their group
+      useEditorStore.getState().moveElementsTo(
+        page.filter((el) => ids.includes(el.id)).map((el) => ({ id: el.id, x: el.x + dx, y: el.y + dy }))
+      )
       return `Moved ${ids.length} element${ids.length > 1 ? 's' : ''}`
     }
 
@@ -153,6 +160,7 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
       const factor = Math.min(5, Math.max(0.1, Number(action.factor) || 1))
       if (Math.abs(factor - 1) < 0.01) return 'No size change'
       const page = currentPageElements()
+      const entries: [string, Record<string, unknown>][] = []
       for (const el of page) {
         if (!ids.includes(el.id)) continue
         const patch: Record<string, number> = {
@@ -162,8 +170,9 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
           height: Math.max(8, Math.round(el.height * factor)),
         }
         if (el.type === 'text' || el.type === 'sticker') patch.fontSize = Math.max(6, Math.round((el as TextElement).fontSize * factor))
-        useEditorStore.getState().updateElements([el.id], patch)
+        entries.push([el.id, patch])
       }
+      updateMany(entries)
       return `Scaled ${ids.length} element${ids.length > 1 ? 's' : ''} by ${factor.toFixed(2)}×`
     }
 
@@ -174,7 +183,7 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
       const page = currentPageElements()
       const isHeading = (el: AnyElement) =>
         el.type === 'text' && ((el as TextElement).bold || (el as TextElement).fontSize / Math.max(1, height) > 0.06)
-      const ids = flatElements(page)
+      const ids = page
         .filter((el) => el.type === 'text')
         .filter((el) => (action.type === 'setHeadingsColor' ? isHeading(el) : true))
         .map((el) => el.id)
@@ -190,7 +199,7 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
       const targets = String(action.targets ?? 'all')
       const isHeading = (el: AnyElement) =>
         el.type === 'text' && ((el as TextElement).bold || (el as TextElement).fontSize / Math.max(1, height) > 0.06)
-      const ids = flatElements(page)
+      const ids = page
         .filter((el) => el.type === 'text')
         .filter((el) => (targets === 'all' ? true : targets === 'headings' ? isHeading(el) : !isHeading(el)))
         .map((el) => el.id)
@@ -234,16 +243,18 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
       const first = els[0]
       const last = els[els.length - 1]
       const start = axis === 'x' ? first.x : first.y
-      const end = axis === 'x' ? last.x : last.y
+      // span = leading edge of the first to trailing edge of the last
+      const end = axis === 'x' ? last.x + last.width : last.y + last.height
       const sizes = els.reduce((sum, e) => sum + (axis === 'x' ? e.width : e.height), 0)
       const gap = (end - start - sizes) / (els.length - 1)
       if (gap < 0) return 'Elements overlap — no distribution applied'
       let cursor = start
+      const positions: { id: string; x: number; y: number }[] = []
       for (const el of els) {
-        const patch = axis === 'x' ? { x: Math.round(cursor) } : { y: Math.round(cursor) }
-        useEditorStore.getState().updateElements([el.id], patch)
+        positions.push(axis === 'x' ? { id: el.id, x: Math.round(cursor), y: el.y } : { id: el.id, x: el.x, y: Math.round(cursor) })
         cursor += (axis === 'x' ? el.width : el.height) + gap
       }
+      useEditorStore.getState().moveElementsTo(positions)
       return `Distributed ${els.length} elements evenly`
     }
 
@@ -265,7 +276,7 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
       })
-      const data = (await res.json()) as { dataUrl?: string; width?: number; height?: number; error?: string; code?: string }
+      const data = (await res.json().catch(() => ({}))) as { dataUrl?: string; width?: number; height?: number; error?: string; code?: string }
       if (!res.ok || !data.dataUrl) throw new Error(data.error ?? 'Image generation failed')
       const iw = data.width ?? 1024
       const ih = data.height ?? 1024
@@ -304,7 +315,7 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ language, texts: texts.map((t) => t.text) }),
       })
-      const data = (await res.json()) as { translations?: string[]; error?: string }
+      const data = (await res.json().catch(() => ({}))) as { translations?: string[]; error?: string }
       if (!res.ok || !Array.isArray(data.translations) || data.translations.length !== texts.length) {
         throw new Error(data.error ?? 'Translation failed')
       }
@@ -340,27 +351,32 @@ function balanceLayout(): string {
 
   // 1. snap elements that are nearly centered to exact center
   let fixed = 0
+  const entries: [string, Record<string, unknown>][] = []
   for (const el of els) {
+    const patch: Record<string, number> = {}
     const cx = el.x + el.width / 2
     const cy = el.y + el.height / 2
     if (Math.abs(cx - width / 2) < width * 0.04) {
-      useEditorStore.getState().updateElements([el.id], { x: Math.round((width - el.width) / 2) })
+      patch.x = Math.round((width - el.width) / 2)
       fixed += 1
     }
     if (Math.abs(cy - height / 2) < height * 0.04) {
-      useEditorStore.getState().updateElements([el.id], { y: Math.round((height - el.height) / 2) })
+      patch.y = Math.round((height - el.height) / 2)
       fixed += 1
     }
     // 2. pull near-margin elements to the safe margin
     if (Math.abs(el.x - margin) < margin * 0.35) {
-      useEditorStore.getState().updateElements([el.id], { x: margin })
+      patch.x = margin
       fixed += 1
     }
     if (Math.abs(el.x + el.width - (width - margin)) < margin * 0.35) {
-      useEditorStore.getState().updateElements([el.id], { x: width - margin - el.width })
+      patch.x = width - margin - el.width
       fixed += 1
     }
+    if (Object.keys(patch).length) entries.push([el.id, patch])
   }
+  // one undo step for the whole clean-up
+  updateMany(entries)
   return fixed
     ? `Layout balanced — ${fixed} alignment${fixed > 1 ? 's' : ''} cleaned up (safe margins + centering)`
     : 'Layout already looks balanced'
