@@ -266,17 +266,17 @@ watermarks, no paywalls.
 
 ## 🚀 Quick start
 
-> **Prerequisites:** [Node.js 20+](https://nodejs.org) or [Bun](https://bun.sh), and a [PostgreSQL](https://www.postgresql.org) database (local install, Docker, or a free serverless host like [Neon](https://neon.tech)).
+> **Prerequisites:** [Node.js 20+](https://nodejs.org) or [Bun](https://bun.sh), and a [PostgreSQL](https://www.postgresql.org) **or** [MySQL 8](https://www.mysql.com) database (local install, Docker, a free serverless host like [Neon](https://neon.tech), or shared hosting).
 
 ```bash
 git clone https://github.com/mir-ashiq/canvix.git
 cd canvix
-bun install            # or: npm install
+cp .env.example .env   # then set DATABASE_URL (postgresql://… or mysql://…)
+bun install            # or: npm install — also runs `prisma generate` for that provider
 
 # set up the database
-cp .env.example .env   # then edit DATABASE_URL with your Postgres connection string
-bun run db:push        # create tables
-bun run db:seed        # load the built-in templates
+bun run prepare-database  # apply migrations for the configured provider
+bun run db:seed           # load the built-in templates
 
 bun run dev            # → http://localhost:3000
 ```
@@ -284,8 +284,68 @@ bun run dev            # → http://localhost:3000
 Production build:
 
 ```bash
-bun run build
+bun run build:deploy   # prepare-database (migrate deploy) + build
 bun run start
+```
+
+`bun run build` alone still builds without touching the database.
+
+## 🗄 Database (PostgreSQL or MySQL)
+
+Canvix runs on either database from the same code. **`DATABASE_URL` alone picks
+the provider** — `prisma.config.ts` reads its prefix and selects the schema and
+migrations folder:
+
+| `DATABASE_URL` | Schema | Migrations |
+|---|---|---|
+| `postgresql://user:pass@host:5432/db` (or `postgres://`) | `prisma/schema.prisma` | `prisma/migrations` |
+| `mysql://user:pass@host:3306/db` | `prisma/schema.mysql.prisma` | `prisma/migrations-mysql` |
+
+- **The Prisma client is generated per provider.** `bun install` runs
+  `prisma generate` (postinstall); run `bun run db:generate` again after
+  switching `DATABASE_URL` to the other database type, and make sure CI /
+  deploy runs it with the production URL.
+- **Deploy:** `bun run prepare-database` (`prisma migrate deploy`) applies the
+  right migrations folder. Never run `db:migrate`, `db:reset` or `db:push`
+  against a shared or production database.
+
+### Changing the schema — always both
+
+1. Edit **both** `prisma/schema.prisma` and `prisma/schema.mysql.prisma`. They
+   must stay identical except the `provider` line (MySQL may additionally use
+   `@db.MediumText` / `@db.LongText`). `bun run db:check-schemas` (also part of
+   `bun test`) fails otherwise.
+2. Add a migration to **both** folders, e.g. against disposable local
+   databases: `DATABASE_URL=postgresql://… bunx prisma migrate dev --name x`
+   and `DATABASE_URL=mysql://… bunx prisma migrate dev --name x`.
+3. Keep MySQL limits in mind: plain `String` is `VARCHAR(191)` there — use
+   `@db.Text` for long text, and MySQL's default collation is case-insensitive
+   for unique/indexed columns.
+
+### Existing PostgreSQL databases (created with `db:push`)
+
+Up to v0.6.0 the schema was applied with `db push`, so existing databases have
+the tables but no migration history. Mark the baseline as applied **once**,
+before the first `prepare-database`:
+
+```bash
+bunx prisma migrate resolve --applied 20261027000000_init
+```
+
+### MySQL / shared hosting (Hostinger, cPanel, …)
+
+- Create the database as **utf8mb4** with collation **utf8mb4_unicode_ci**.
+- Grant the database user **ALL PRIVILEGES** on that database.
+- Use `mysql://user:pass@host:3306/db`; URL-encode special characters in the
+  password.
+
+### Copying existing PostgreSQL data into MySQL
+
+```bash
+# 1. create the MySQL tables
+DATABASE_URL=mysql://… bun run prepare-database
+# 2. copy every table (tables that already have rows in MySQL are skipped)
+PG_SOURCE_URL=postgresql://… DATABASE_URL=mysql://… bun run db:copy-pg-to-mysql
 ```
 
 ## 🛠 Tech stack
@@ -296,8 +356,8 @@ bun run start
 | Styling | Tailwind CSS 4 + shadcn/ui |
 | Canvas engine | [Konva.js](https://konvajs.org) via react-konva |
 | State | Zustand |
-| Database | Prisma ORM + PostgreSQL (jsonb) |
-| Realtime | Postgres event log + SSE (no WebSocket server needed) |
+| Database | Prisma ORM + PostgreSQL (jsonb) or MySQL 8 (JSON) |
+| Realtime | Database event log + SSE (no WebSocket server needed) |
 | AI | server-side provider layer (z-ai-web-dev-sdk, vision-capable) |
 | Fonts | 15 hand-picked Google Fonts |
 
@@ -324,7 +384,8 @@ src/
 │   └── design-actions.ts   # v0.5 validated, undoable AI editor actions
 ├── store/                  # zustand stores (app + editor + comments)
 └── hooks/
-prisma/                     # schema + seed
+prisma/                     # schema.prisma (Postgres) + schema.mysql.prisma, migrations per provider, seed
+scripts/                    # schema parity check, Postgres → MySQL data copy
 research/                   # architecture decision records & audits
 ```
 
@@ -482,3 +543,4 @@ Contributions are very welcome! Areas that especially need help:
 
 Canvix is an independent open-source project and is not affiliated with, endorsed by,
 or connected to Canva.
+# zorvie
