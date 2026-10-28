@@ -9,7 +9,7 @@ import { AppHeader, type AppPanelProps } from './registry'
 import { toast } from '@/hooks/use-toast'
 
 export function QRApp({ onClose }: AppPanelProps) {
-  const [text, setText] = useState('https://github.com/mir-ashiq/canvix')
+  const [text, setText] = useState('https://example.com')
   const [size, setSize] = useState(320)
   const [dark, setDark] = useState('#1F2226')
   const [preview, setPreview] = useState<string | null>(null)
@@ -66,7 +66,7 @@ export function QRApp({ onClose }: AppPanelProps) {
           <select
             value={size}
             onChange={(e) => setSize(Number(e.target.value))}
-            className="w-full h-9 rounded-xl bg-white/[0.05] border border-white/10 px-2 text-[12px] text-white outline-none [color-scheme:dark]"
+            className="w-full h-9 rounded-xl bg-white/[0.05] border border-white/10 px-2 text-[12px] text-white outline-none [color-scheme:dark] [&_option]:bg-[#1C1E24] [&_option]:text-white"
             aria-label="QR size"
           >
             {[160, 240, 320, 480].map((s) => (

@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const design = await db.design.create({
       data: {
-        name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'Untitled design',
+        name: typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 120) : 'Untitled design',
         width: Number.isFinite(body.width) ? Math.round(body.width) : 1080,
         height: Number.isFinite(body.height) ? Math.round(body.height) : 1080,
         pages: toPages(body.pages),

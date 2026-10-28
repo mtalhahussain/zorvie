@@ -23,7 +23,7 @@ export function TextPanel() {
       <div className="flex gap-2 mt-2">
         <button
           className="flex-1 h-10 rounded-xl border border-white/12 bg-white/[0.05] hover:bg-white/10 text-[12px] font-semibold flex items-center justify-center gap-1.5 text-white/85 transition-colors"
-          onClick={() => addTextStyled({ text: 'Draft magic copy with Canvix AI…', fontSize: 28, fontFamily: 'Poppins', width: 640 })}
+          onClick={() => addTextStyled({ text: 'Draft magic copy with Zorvie AI…', fontSize: 28, fontFamily: 'Poppins', width: 640 })}
           aria-label="Magic Write"
         >
           <Sparkles size={13} className="text-[#02C0CC]" /> Magic Write

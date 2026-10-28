@@ -17,14 +17,12 @@ import {
   Video,
   Square,
   FileImage,
-  Github,
   LayoutGrid,
   LayoutTemplate,
   FolderOpen,
   BookMarked,
   CircleHelp,
   Info,
-  Heart,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
@@ -65,7 +63,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toast } from '@/hooks/use-toast'
-import { useIsMobile } from '@/hooks/use-mobile'
 
 const CATEGORY_ICONS: Record<string, typeof Presentation> = {
   social: Instagram,
@@ -87,7 +84,6 @@ export function Dashboard() {
   const openEditor = useAppStore((s) => s.openEditor)
   const loadEditorDesign = useEditorStore((s) => s.loadDesign)
   const { designs, loading, refresh } = useDesigns()
-  const isMobile = useIsMobile()
   const [helpOpen, setHelpOpen] = useState(false)
 
   const [query, setQuery] = useState('')
@@ -280,23 +276,13 @@ export function Dashboard() {
           </button>
         ))}
         <div className="mt-auto flex flex-col items-center gap-2">
-          <a
-            href="https://github.com/mir-ashiq/canvix"
-            target="_blank"
-            rel="noreferrer"
-            className="w-9 h-9 rounded-full text-white/50 hover:text-white hover:bg-white/10 flex items-center justify-center transition-colors"
-            aria-label="GitHub repository"
-            title="GitHub repository"
-          >
-            <Github size={18} />
-          </a>
           <button
             onClick={goLanding}
             className="h-9 w-9 rounded-full cv-topbar-gradient text-white text-[13px] font-bold flex items-center justify-center"
-            aria-label="About Canvix"
-            title="About Canvix"
+            aria-label="About Zorvie"
+            title="About Zorvie"
           >
-            C
+            Z
           </button>
         </div>
       </nav>
@@ -305,7 +291,7 @@ export function Dashboard() {
       {/* ── Header ── */}
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#1F142E]/90 backdrop-blur-lg">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center gap-3">
-          <button onClick={goLanding} aria-label="Canvix home" className="shrink-0 md:hidden">
+          <button onClick={goLanding} aria-label="Zorvie home" className="shrink-0 md:hidden">
             <Logo size={26} />
           </button>
           <div className="relative flex-1 max-w-md">
@@ -339,24 +325,14 @@ export function Dashboard() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 bg-[#16181D] border-white/10 text-white">
                 <div className="px-3 py-2.5 border-b border-white/[0.07]">
-                  <div className="text-[13px] font-semibold">Canvix creator</div>
+                  <div className="text-[13px] font-semibold">Zorvie creator</div>
                   <div className="text-[11px] text-white/45">Free · open-source · local-first</div>
                 </div>
                 <DropdownMenuItem className="gap-2" onClick={() => setHelpOpen(true)}>
                   <CircleHelp size={14} /> Help &amp; shortcuts
                 </DropdownMenuItem>
                 <DropdownMenuItem className="gap-2" onClick={goLanding}>
-                  <Info size={14} /> About Canvix
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2" asChild>
-                  <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
-                    <Github size={14} /> GitHub repository
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2" asChild>
-                  <a href="https://github.com/mir-ashiq/canvix/stargazers" target="_blank" rel="noreferrer">
-                    <Heart size={14} /> Star the project
-                  </a>
+                  <Info size={14} /> About Zorvie
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -670,16 +646,8 @@ export function Dashboard() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-white/40">
           <div className="flex items-center gap-2.5">
             <Logo size={20} />
-            <span>© 2026 · MIT License</span>
+            <span>© 2026 Zorvie · Developed by <span className="font-semibold text-white/70">Talha Hussain</span></span>
           </div>
-          <a
-            href="https://github.com/mir-ashiq/canvix"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 hover:text-white/80 transition-colors"
-          >
-            <Github size={14} /> {isMobile ? 'GitHub' : 'github.com/mir-ashiq/canvix'}
-          </a>
         </div>
       </footer>
       </div>{/* end flex-1 column */}
@@ -742,14 +710,6 @@ export function Dashboard() {
                 <li>· <b className="text-white/90">Crop</b> — select an image → Crop button or right-click</li>
               </ul>
             </div>
-            <a
-              href="https://github.com/mir-ashiq/canvix/discussions"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 text-[12px] text-[#02C0CC] hover:underline"
-            >
-              <Github size={13} /> Still stuck? Ask in GitHub discussions
-            </a>
           </div>
         </DialogContent>
       </Dialog>

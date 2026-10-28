@@ -5,7 +5,7 @@ import { TEMPLATES } from '../src/lib/templates'
 
 const db = new PrismaClient()
 
-// Typed template list cast for the Postgres jsonb column.
+// Typed template list cast for the Json column (jsonb on Postgres, JSON on MySQL).
 const pagesOf = (t: (typeof TEMPLATES)[number]) =>
   t.pages as unknown as Prisma.InputJsonValue
 

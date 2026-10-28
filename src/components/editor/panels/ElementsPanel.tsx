@@ -75,13 +75,13 @@ export function ElementsPanel() {
           />
         </div>
         <TabsList className="mt-3 w-full grid grid-cols-4 h-8 bg-white/[0.05]">
-          <TabsTrigger value="shapes" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Shapes</TabsTrigger>
-          <TabsTrigger value="lines" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Lines</TabsTrigger>
-          <TabsTrigger value="graphics" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Graphics</TabsTrigger>
-          <TabsTrigger value="stickers" className="text-xs data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Stickers</TabsTrigger>
-          <TabsTrigger value="tables" className="text-[11px] data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Tables</TabsTrigger>
-          <TabsTrigger value="frames" className="text-[11px] data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Frames</TabsTrigger>
-          <TabsTrigger value="embeds" className="text-[11px] data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Embeds</TabsTrigger>
+          <TabsTrigger value="shapes" className="text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Shapes</TabsTrigger>
+          <TabsTrigger value="lines" className="text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Lines</TabsTrigger>
+          <TabsTrigger value="graphics" className="text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Graphics</TabsTrigger>
+          <TabsTrigger value="stickers" className="text-xs text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Stickers</TabsTrigger>
+          <TabsTrigger value="tables" className="text-[11px] text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Tables</TabsTrigger>
+          <TabsTrigger value="frames" className="text-[11px] text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Frames</TabsTrigger>
+          <TabsTrigger value="embeds" className="text-[11px] text-white/60 hover:text-white data-[state=active]:bg-[#7630D7] data-[state=active]:text-white">Embeds</TabsTrigger>
         </TabsList>
       </div>
 

@@ -1,258 +1,427 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import {
   ArrowRight,
-  Github,
+  ArrowDown,
+  Check,
   Shapes,
   Type,
-  Image as ImageIcon,
   Download,
   Smartphone,
   Layers,
-  Sparkles,
   Palette,
   Undo2,
-  Presentation,
-  Instagram,
-  Printer,
-  Video,
-  BadgeCheck,
   Heart,
-  Star,
+  Github,
+  Menu,
+  X,
+  MousePointer2,
+  LayoutTemplate,
+  Wand2,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
-import { Logo } from '@/components/logo'
-import { Button } from '@/components/ui/button'
+import { Logo, LogoMark } from '@/components/logo'
 
-// ── Editor mockup (pure CSS, zero assets) ────────────────────
+const REPO_URL = 'https://github.com/mtalhahussain/zorvie'
 
-function EditorMockup() {
+// ── Hero collage — three "printed" designs on the desk ───────
+
+function HeroCollage() {
   return (
-    <div className="relative w-full aspect-[16/10] rounded-2xl border border-black/10 bg-white shadow-2xl shadow-violet-900/10 overflow-hidden">
-      {/* window chrome */}
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F4F5F7] border-b border-black/5">
-        <span className="h-2.5 w-2.5 rounded-full bg-[#FF5C8A]" />
-        <span className="h-2.5 w-2.5 rounded-full bg-[#FFD166]" />
-        <span className="h-2.5 w-2.5 rounded-full bg-[#34C77B]" />
-        <span className="ml-3 flex-1 max-w-[280px] h-4 rounded bg-white border border-black/5" />
+    <div className="relative h-[360px] sm:h-[460px] lg:h-[540px] w-full" aria-hidden="true">
+      {/* colour blobs */}
+      <div className="absolute left-[8%] top-[10%] h-48 w-48 rounded-full bg-[var(--zv-pink)] opacity-30 blur-3xl" />
+      <div className="absolute right-[4%] bottom-[8%] h-56 w-56 rounded-full bg-[var(--zv-teal)] opacity-30 blur-3xl" />
+      <div className="absolute right-[30%] top-[30%] h-40 w-40 rounded-full bg-[var(--zv-violet)] opacity-25 blur-3xl" />
+
+      {/* poster */}
+      <div
+        className="zv-drop absolute left-[2%] top-[4%] w-[50%] aspect-[4/5] rounded-[14px] border-2 border-[var(--zv-ink)] overflow-hidden shadow-[6px_6px_0_var(--zv-ink)]"
+        style={{ '--zv-r': '-7deg', animationDelay: '0.15s', background: 'var(--zv-sun)' } as CSSProperties}
+      >
+        <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[var(--zv-pink)]" />
+        <div className="absolute right-6 top-16 h-10 w-10 rounded-full bg-[var(--zv-sky)] border-2 border-[var(--zv-ink)]" />
+        <div className="absolute left-4 right-4 bottom-4">
+          <div className="zv-mono text-[9px] sm:text-[10px] uppercase text-[var(--zv-ink)]/70">Fri · 21:00 · Hall B</div>
+          <div className="zv-display text-[28px] sm:text-[40px] lg:text-[48px] font-black leading-[0.85] text-[var(--zv-ink)]">
+            Live
+            <br />
+            Music
+          </div>
+        </div>
       </div>
-      <div className="flex h-[calc(100%-37px)]">
-        {/* dark rail */}
-        <div className="w-12 bg-[#17181D] flex flex-col items-center pt-3 gap-3">
-          {[Presentation, Shapes, Type, ImageIcon, Layers].map((Icon, i) => (
-            <div
-              key={i}
-              className={`h-8 w-8 rounded-lg flex items-center justify-center ${
-                i === 0 ? 'bg-[#26272E] text-white' : 'text-white/45'
-              }`}
-            >
-              <Icon size={15} />
-            </div>
-          ))}
+
+      {/* social post */}
+      <div
+        className="zv-drop absolute right-[1%] top-0 w-[46%] aspect-square rounded-[14px] border-2 border-[var(--zv-ink)] overflow-hidden shadow-[6px_6px_0_var(--zv-ink)]"
+        style={{ '--zv-r': '6deg', animationDelay: '0.3s', background: 'var(--zv-violet)' } as CSSProperties}
+      >
+        <div className="absolute -left-8 -bottom-8 h-28 w-28 rounded-full bg-[var(--zv-teal)]" />
+        <div className="absolute inset-0 flex flex-col justify-between p-4">
+          <div className="zv-mono text-[9px] sm:text-[10px] uppercase text-white/75">@studio · 1080²</div>
+          <div className="relative">
+            <div className="zv-display text-[44px] sm:text-[64px] lg:text-[76px] font-black leading-[0.8] text-[var(--zv-sun)]">50%</div>
+            <div className="zv-display italic text-[16px] sm:text-[22px] text-white">mega sale</div>
+          </div>
         </div>
-        {/* panel */}
-        <div className="w-16 sm:w-24 bg-white border-r border-black/5 p-2 grid grid-cols-2 gap-2 content-start">
-          {['#FF5C8A', '#00C4CC', '#7D2AE8', '#FFD166', '#34C77B', '#0F4C4C'].map((c) => (
-            <div key={c} className="aspect-square rounded-md" style={{ background: c }} />
-          ))}
-        </div>
-        {/* canvas workspace */}
-        <div className="flex-1 bg-[#E9EAF0] flex items-center justify-center p-4">
-          <div className="relative w-52 h-40 sm:w-64 sm:h-48 rounded-lg overflow-hidden shadow-lg" style={{ background: 'linear-gradient(135deg,#FF5C8A,#FFB84C)' }}>
-            <div className="absolute top-3 left-3 w-8 h-8 rounded bg-white/80 animate-float" />
-            <div className="absolute top-9 left-3 right-3">
-              <div className="h-4 rounded bg-white/90 mb-1.5" style={{ width: '70%' }} />
-              <div className="h-4 rounded bg-white/70" style={{ width: '45%' }} />
-            </div>
-            <div className="absolute bottom-3 left-3 h-4 w-20 rounded-full bg-[#1F2226]" />
-            <div className="absolute -bottom-2 -right-2 text-4xl">✨</div>
-            {/* selection handles */}
-            <div className="absolute inset-3 border-2 border-[#00C4CC] rounded">
-              {['-top-1 -left-1', '-top-1 -right-1', '-bottom-1 -left-1', '-bottom-1 -right-1'].map((pos) => (
-                <span key={pos} className={`absolute ${pos} h-2.5 w-2.5 rounded-full bg-[#00C4CC] border-2 border-white`} />
-              ))}
+      </div>
+
+      {/* story — currently selected in the editor */}
+      <div
+        className="zv-drop absolute left-[30%] bottom-0 w-[42%] aspect-[4/5]"
+        style={{ '--zv-r': '-1.5deg', animationDelay: '0.45s' } as CSSProperties}
+      >
+        <div className="absolute inset-0 rounded-[14px] border-2 border-[var(--zv-ink)] overflow-hidden shadow-[6px_6px_0_var(--zv-ink)] bg-[linear-gradient(160deg,var(--zv-orange),var(--zv-pink))]">
+          <div className="absolute inset-x-4 top-4 h-[46%] rounded-lg bg-[var(--zv-paper)] flex items-center justify-center">
+            <LogoMark size={44} className="animate-float" />
+          </div>
+          <div className="absolute left-4 right-4 bottom-4">
+            <div className="zv-display text-[22px] sm:text-[30px] lg:text-[34px] font-black leading-[0.9] text-white">
+              New
+              <br />
+              drop.
             </div>
           </div>
+        </div>
+        {/* selection box + handles */}
+        <div className="absolute -inset-2 border-2 border-dashed border-[var(--zv-violet)] rounded-[18px] pointer-events-none">
+          {['-top-[7px] -left-[7px]', '-top-[7px] -right-[7px]', '-bottom-[7px] -left-[7px]', '-bottom-[7px] -right-[7px]'].map((pos) => (
+            <span key={pos} className={`absolute ${pos} h-3 w-3 rounded-full bg-white border-2 border-[var(--zv-violet)]`} />
+          ))}
+        </div>
+        {/* floating text toolbar */}
+        <div className="absolute -top-12 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-[var(--zv-ink)] text-[var(--zv-paper)] zv-mono text-[10px] px-3 py-1.5 flex items-center gap-2">
+          <span className="font-bold text-[var(--zv-sun)]">Aa</span>
+          <span className="opacity-40">|</span> Fraunces <span className="opacity-40">|</span> 72
+          <span className="h-3 w-3 rounded-full bg-[var(--zv-pink)] border border-white/40" />
+        </div>
+        {/* collaborator cursor */}
+        <div className="absolute -right-10 sm:-right-14 top-[38%] flex items-start gap-1 animate-float">
+          <MousePointer2 size={20} className="fill-[var(--zv-teal)] text-[var(--zv-ink)]" />
+          <span className="mt-4 rounded-full bg-[var(--zv-teal)] text-white zv-mono text-[10px] px-2 py-0.5 border border-[var(--zv-ink)]">you</span>
         </div>
       </div>
     </div>
   )
 }
 
-// ── Feature cards ────────────────────────────────────────────
+// ── Content ──────────────────────────────────────────────────
+
+const FORMATS = ['Instagram posts', 'Pitch decks', 'Posters', 'Stories', 'Logos', 'Thumbnails', 'Certificates', 'Invoices', 'Business cards', 'Calendars']
+const STAR_COLORS = ['var(--zv-sun)', 'var(--zv-pink)', 'var(--zv-teal)', 'var(--zv-sky)', 'var(--zv-orange)']
+
+const STATS = [
+  { num: '60+', label: 'Google fonts', bg: 'var(--zv-lemon-soft)', fg: 'var(--zv-orange)' },
+  { num: '11', label: 'Starter templates', bg: 'var(--zv-pink-soft)', fg: 'var(--zv-pink)' },
+  { num: '3×', label: 'Export resolution', bg: 'var(--zv-teal-soft)', fg: 'var(--zv-teal)' },
+  { num: '0', label: 'Watermarks, ever', bg: 'var(--zv-violet-soft)', fg: 'var(--zv-violet)' },
+]
+
+const STEPS = [
+  { icon: LayoutTemplate, title: 'Pick a template', text: 'Choose a ready-made size or start from a blank canvas.', color: 'var(--zv-pink)', soft: 'var(--zv-pink-soft)' },
+  { icon: Wand2, title: 'Make it yours', text: 'Drop in text, photos, shapes and your brand colours.', color: 'var(--zv-violet)', soft: 'var(--zv-violet-soft)' },
+  { icon: Download, title: 'Download & share', text: 'Export PNG, JPG, PDF, SVG or video — free, no watermark.', color: 'var(--zv-teal)', soft: 'var(--zv-teal-soft)' },
+]
 
 const FEATURES = [
-  {
-    icon: Shapes,
-    title: 'Drag-and-drop editor',
-    text: 'Shapes, lines, graphics, stickers and images — move, resize and rotate everything with buttery-smooth canvas rendering.',
-  },
-  {
-    icon: Type,
-    title: 'Beautiful typography',
-    text: '15 hand-picked Google Fonts, styles and pairings. Bold, italic, spacing, alignment and colors at your fingertips.',
-  },
-  {
-    icon: Palette,
-    title: 'Templates for everything',
-    text: 'Instagram posts, stories, pitch decks, posters, logos and thumbnails. Start from a template, make it yours.',
-  },
-  {
-    icon: Layers,
-    title: 'Layers & smart guides',
-    text: 'Reorder layers, lock elements and snap things into perfect alignment with magenta smart guides.',
-  },
-  {
-    icon: Undo2,
-    title: 'Undo, redo & autosave',
-    text: 'A full history stack with keyboard shortcuts, plus automatic saving so your work is never lost.',
-  },
-  {
-    icon: Download,
-    title: 'Export anywhere',
-    text: 'Download crisp PNG and JPG files up to 3× resolution. Your designs, your files — no watermarks, ever.',
-  },
-  {
-    icon: Smartphone,
-    title: 'Works on every device',
-    text: 'The same editor adapts from desktop workstations to tablets and phones with touch-native interactions.',
-  },
-  {
-    icon: Heart,
-    title: 'Free & open source',
-    text: 'MIT licensed, self-hostable, community-driven. No accounts, no paywalls, no locked premium elements.',
-  },
+  { icon: Type, title: 'Beautiful typography', text: '60+ hand-picked Google Fonts, styles and pairings at your fingertips.', color: 'var(--zv-orange)', soft: 'var(--zv-peach-soft)' },
+  { icon: Palette, title: 'Templates for everything', text: 'Posts, stories, decks, posters, logos and thumbnails.', color: 'var(--zv-pink)', soft: 'var(--zv-pink-soft)' },
+  { icon: Layers, title: 'Layers & smart guides', text: 'Reorder, lock and snap everything into perfect alignment.', color: 'var(--zv-violet)', soft: 'var(--zv-violet-soft)' },
+  { icon: Undo2, title: 'Undo, redo & autosave', text: 'A full history stack plus automatic saving — work is never lost.', color: 'var(--zv-sky)', soft: 'var(--zv-sky-soft)' },
+  { icon: Download, title: 'Export anywhere', text: 'Crisp PNG, JPG, PDF, SVG and video. Your files, no watermarks.', color: 'var(--zv-teal)', soft: 'var(--zv-teal-soft)' },
+  { icon: Smartphone, title: 'Every device', text: 'Desktop, tablet or phone — touch-native, same editor.', color: 'var(--zv-orange)', soft: 'var(--zv-lemon-soft)' },
 ]
 
-const TEMPLATE_SHOWCASE = [
-  { label: 'Instagram post', from: '#FF5C8A', to: '#FFB84C', icon: Instagram, title: 'MEGA SALE' },
-  { label: 'Story', from: '#B8E986', to: '#7ED957', icon: Instagram, title: 'NEW DROP' },
-  { label: 'Presentation', from: '#FFFFFF', to: '#E8F6F7', icon: Presentation, title: 'Nimbus', dark: true },
-  { label: 'Poster', from: '#FFD166', to: '#FFC93C', icon: Printer, title: 'LIVE MUSIC', dark: true },
-  { label: 'Thumbnail', from: '#0D1117', to: '#161B22', icon: Video, title: 'TOP 10 AI' },
-  { label: 'Logo', from: '#FFFFFF', to: '#F4F5F7', icon: BadgeCheck, title: 'NOVA', dark: true },
+const TEMPLATES = [
+  { label: 'Instagram post', size: '1080 × 1080', title: 'Mega sale', bg: 'var(--zv-pink)', fg: '#fff', r: '-3deg' },
+  { label: 'Story', size: '1080 × 1920', title: 'New drop', bg: 'var(--zv-violet)', fg: 'var(--zv-sun)', r: '2deg' },
+  { label: 'Presentation', size: '1920 × 1080', title: 'Nimbus', bg: 'var(--zv-sky)', fg: '#fff', r: '-1deg' },
+  { label: 'Poster', size: 'A3', title: 'Live music', bg: 'var(--zv-sun)', fg: 'var(--zv-ink)', r: '3deg' },
+  { label: 'Thumbnail', size: '1280 × 720', title: 'Top 10', bg: 'var(--zv-teal)', fg: '#fff', r: '-2deg' },
+  { label: 'Logo', size: '500 × 500', title: 'Nova', bg: 'var(--zv-orange)', fg: 'var(--zv-ink)', r: '1.5deg' },
 ]
+
+const NAV_LINKS: [string, string, string][] = [
+  ['01', 'Features', '#features'],
+  ['02', 'Templates', '#templates'],
+  ['03', 'Open source', '#opensource'],
+]
+
+function SectionLabel({ n, children, color = 'var(--zv-orange)' }: { n: string; children: React.ReactNode; color?: string }) {
+  return (
+    <div className="zv-mono text-[11px] uppercase inline-flex items-center gap-2.5 rounded-full border-2 border-[var(--zv-ink)] bg-white px-3 py-1 text-[var(--zv-ink)]">
+      <span className="font-bold" style={{ color }}>{n}</span>
+      {children}
+    </div>
+  )
+}
 
 export function Landing() {
   const goDashboard = useAppStore((s) => s.goDashboard)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
+    <div className="zv-landing zv-grain min-h-screen flex flex-col overflow-x-hidden">
       {/* ── Nav ── */}
-      <header className="sticky top-0 z-50 border-b border-black/5 bg-white/80 backdrop-blur-lg">
-        <nav className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center justify-between">
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Canvix home">
+      <header className="sticky top-0 z-50 border-b border-[var(--zv-line)] bg-[var(--zv-paper)]/85 backdrop-blur-md">
+        <nav className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Zorvie home">
             <Logo size={30} />
           </button>
-          <div className="hidden md:flex items-center gap-1 text-sm font-medium text-muted-foreground">
-            <a href="#features" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Features</a>
-            <a href="#templates" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Templates</a>
-            <a href="#opensource" className="px-3 py-2 rounded-lg hover:bg-black/5 hover:text-foreground transition">Open source</a>
+          <div className="hidden md:flex items-center gap-7 zv-mono text-[11px] uppercase text-[var(--zv-muted)]">
+            {NAV_LINKS.map(([n, label, href]) => (
+              <a key={href} href={href} className="group hover:text-[var(--zv-ink)] transition-colors">
+                <span className="text-[var(--zv-orange)] mr-1.5">{n}</span>
+                <span className="bg-[linear-gradient(var(--zv-pink),var(--zv-pink))] bg-[length:0%_2px] bg-left-bottom bg-no-repeat group-hover:bg-[length:100%_2px] transition-[background-size] duration-300 pb-0.5">
+                  {label}
+                </span>
+              </a>
+            ))}
           </div>
           <div className="flex items-center gap-2">
-            <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
-              <Button variant="ghost" size="sm" className="rounded-full gap-1.5">
-                <Github size={16} /> <span className="hidden sm:inline">GitHub</span>
-              </Button>
-            </a>
-            <Button size="sm" className="btn-brand-gradient rounded-full px-4" onClick={goDashboard}>
-              Start designing
-            </Button>
+            <button
+              onClick={goDashboard}
+              className="rounded-full bg-[var(--zv-ink)] text-[var(--zv-paper)] text-sm font-bold px-4 sm:px-5 h-10 inline-flex items-center gap-2 hover:bg-[var(--zv-orange)] hover:text-[var(--zv-ink)] transition-colors"
+            >
+              <span className="hidden sm:inline">Start designing</span>
+              <span className="sm:hidden">Start</span>
+              <ArrowRight size={15} />
+            </button>
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              className="md:hidden h-10 w-10 rounded-full border-2 border-[var(--zv-ink)] flex items-center justify-center"
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={menuOpen}
+            >
+              {menuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
           </div>
         </nav>
+        {menuOpen && (
+          <div className="md:hidden border-t border-[var(--zv-line)] px-4 py-3 flex flex-col">
+            {NAV_LINKS.map(([n, label, href]) => (
+              <a
+                key={href}
+                href={href}
+                onClick={() => setMenuOpen(false)}
+                className="py-3 flex items-center gap-3 font-bold border-b border-[var(--zv-line)] last:border-0"
+              >
+                <span className="zv-mono text-[11px] text-[var(--zv-orange)]">{n}</span> {label}
+              </a>
+            ))}
+          </div>
+        )}
       </header>
 
       <main className="flex-1">
         {/* ── Hero ── */}
-        <section className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-brand-gradient-soft" aria-hidden="true" />
-          <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full blur-3xl opacity-20 bg-[#7D2AE8]" aria-hidden="true" />
-          <div className="absolute -bottom-40 -left-32 h-96 w-96 rounded-full blur-3xl opacity-20 bg-[#00C4CC]" aria-hidden="true" />
-          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 pt-16 pb-20 sm:pt-24 sm:pb-28 text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-xs font-semibold text-[#7D2AE8] shadow-sm animate-fade-up">
-              <Sparkles size={14} /> Free forever · No account needed · MIT licensed
+        <section className="relative">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-12 pb-16 sm:pt-20 sm:pb-24 grid lg:grid-cols-[1.05fr_1fr] gap-12 lg:gap-8 items-center">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border-2 border-[var(--zv-ink)] bg-[var(--zv-lemon-soft)] px-3 py-1.5 text-[13px] font-bold animate-fade-up">
+                <span className="h-2 w-2 rounded-full bg-[var(--zv-pink)] animate-pulse" /> Free design studio for everyone
+              </div>
+
+              <h1 className="zv-display mt-7 font-black leading-[0.9] text-[15vw] sm:text-[88px] lg:text-[104px] animate-fade-up delay-100">
+                Design
+                <br />
+                anything.
+                <span className="block mt-2 font-normal italic text-[11vw] sm:text-[64px] lg:text-[76px] leading-[1.05]">
+                  <span className="zv-sunset-text">Free for</span>{' '}
+                  <span className="relative inline-block zv-sunset-text pr-1">
+                    everyone.
+                    <svg className="absolute left-0 -bottom-2 w-full h-4" viewBox="0 0 300 16" preserveAspectRatio="none" aria-hidden="true">
+                      <path className="zv-draw" d="M3 11 C 60 3, 120 3, 170 8 S 260 14, 297 5" fill="none" stroke="var(--zv-pink)" strokeWidth="3.5" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                </span>
+              </h1>
+
+              <p className="mt-8 max-w-md text-[17px] leading-relaxed text-[var(--zv-muted)] animate-fade-up delay-200">
+                Make social posts, presentations, posters, logos and more. Drag, drop, download — right in
+                your browser, on any device.
+              </p>
+
+              <ul className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold animate-fade-up delay-200">
+                {[
+                  ['No sign-up', 'var(--zv-teal)'],
+                  ['No watermark', 'var(--zv-violet)'],
+                  ['Works on mobile', 'var(--zv-pink)'],
+                ].map(([t, c]) => (
+                  <li key={t} className="flex items-center gap-1.5">
+                    <span className="h-5 w-5 rounded-full flex items-center justify-center text-white" style={{ background: c }}>
+                      <Check size={12} strokeWidth={3} />
+                    </span>
+                    {t}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-9 flex flex-col sm:flex-row sm:items-center gap-4 animate-fade-up delay-300">
+                <button
+                  onClick={goDashboard}
+                  className="zv-press rounded-full border-2 border-[var(--zv-ink)] bg-[var(--zv-orange)] text-[var(--zv-ink)] font-extrabold text-base h-14 px-8 inline-flex items-center justify-center gap-2"
+                >
+                  Start designing — it&apos;s free <ArrowRight size={18} />
+                </button>
+                <a
+                  href="#templates"
+                  className="inline-flex items-center justify-center gap-2 h-14 px-4 font-bold text-[var(--zv-ink)] hover:text-[var(--zv-violet)] transition-colors"
+                >
+                  See templates <ArrowDown size={16} />
+                </a>
+              </div>
             </div>
-            <h1 className="mt-6 text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.05] animate-fade-up delay-100">
-              Design anything.
-              <br />
-              <span className="text-brand-gradient">Free for everyone.</span>
-            </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-base sm:text-lg text-muted-foreground animate-fade-up delay-200">
-              Canvix is the open-source design tool for social posts, presentations, posters, logos and
-              more. Drag, drop, export — right in your browser, on any device.
-            </p>
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up delay-300">
-              <Button size="lg" className="btn-brand-gradient rounded-full px-8 text-base h-12 gap-2" onClick={goDashboard}>
-                Start designing — it&apos;s free <ArrowRight size={18} />
-              </Button>
-              <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer" className="w-full sm:w-auto">
-                <Button size="lg" variant="outline" className="rounded-full px-8 text-base h-12 gap-2 w-full sm:w-auto">
-                  <Github size={18} /> Star on GitHub
-                </Button>
-              </a>
-            </div>
-            <div className="mt-14 sm:mt-20 animate-fade-up delay-300">
-              <EditorMockup />
-            </div>
+
+            <HeroCollage />
           </div>
         </section>
 
-        {/* ── Stats strip ── */}
-        <section className="border-y border-black/5 bg-[#FAFAFC]">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
-            {[
-              ['MIT', 'license'],
-              ['15', 'fonts bundled'],
-              ['11', 'starter templates'],
-              ['0', 'watermarks'],
-            ].map(([num, label]) => (
-              <div key={label}>
-                <div className="text-3xl sm:text-4xl font-extrabold text-brand-gradient">{num}</div>
-                <div className="mt-1 text-sm text-muted-foreground">{label}</div>
+        {/* ── Formats marquee ── */}
+        <section className="border-y-2 border-[var(--zv-ink)] bg-[var(--zv-ink)] text-[var(--zv-paper)] overflow-hidden" aria-label="Things you can design">
+          <div className="zv-marquee flex w-max py-4">
+            {[0, 1].map((copy) => (
+              <div key={copy} className="flex shrink-0 items-center" aria-hidden={copy === 1}>
+                {FORMATS.map((f, i) => (
+                  <span key={f} className="zv-display italic text-2xl sm:text-3xl px-6 flex items-center gap-6 whitespace-nowrap">
+                    {f}
+                    <span className="not-italic text-xl" style={{ color: STAR_COLORS[i % STAR_COLORS.length] }}>✺</span>
+                  </span>
+                ))}
               </div>
             ))}
           </div>
         </section>
 
-        {/* ── Features ── */}
-        <section id="features" className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
-          <h2 className="text-center text-3xl sm:text-4xl font-extrabold tracking-tight">
-            Everything you need to <span className="text-brand-gradient">create</span>
-          </h2>
-          <p className="mt-4 text-center text-muted-foreground max-w-2xl mx-auto">
-            A serious editor, not a toy. Canvix packs the features people actually use from
-            commercial design tools — minus the price tag.
-          </p>
-          <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* ── Stats ── */}
+        <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-14 sm:pt-20">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {STATS.map((s) => (
+              <div key={s.label} className="rounded-2xl border-2 border-[var(--zv-ink)] p-5 sm:p-7" style={{ background: s.bg }}>
+                <div className="zv-display font-black text-5xl sm:text-6xl leading-none" style={{ color: s.fg }}>{s.num}</div>
+                <div className="mt-3 zv-mono text-[11px] uppercase text-[var(--zv-ink)]/70">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── How it works ── */}
+        <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-20 sm:pt-28">
+          <div className="text-center">
+            <h2 className="zv-display font-black text-4xl sm:text-5xl leading-[0.95]">
+              Ready in <span className="italic font-normal zv-sunset-text">three steps.</span>
+            </h2>
+            <p className="mt-4 text-[var(--zv-muted)]">No design skills needed.</p>
+          </div>
+          <ol className="mt-12 grid md:grid-cols-3 gap-5 relative">
+            {STEPS.map((s, i) => (
+              <li key={s.title} className="relative rounded-2xl border-2 border-[var(--zv-ink)] bg-white p-7 overflow-hidden">
+                <span className="zv-display absolute -right-2 -top-6 font-black text-[120px] leading-none opacity-15" style={{ color: s.color }} aria-hidden="true">
+                  {i + 1}
+                </span>
+                <div className="relative h-12 w-12 rounded-xl flex items-center justify-center border-2 border-[var(--zv-ink)]" style={{ background: s.soft, color: s.color }}>
+                  <s.icon size={22} />
+                </div>
+                <div className="relative mt-5 zv-mono text-[11px] uppercase" style={{ color: s.color }}>Step {i + 1}</div>
+                <h3 className="relative zv-display mt-1 text-2xl font-black">{s.title}</h3>
+                <p className="relative mt-2 text-sm text-[var(--zv-muted)] leading-relaxed">{s.text}</p>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-10 text-center">
+            <button
+              onClick={goDashboard}
+              className="zv-press rounded-full border-2 border-[var(--zv-ink)] bg-[var(--zv-violet)] text-white font-extrabold h-12 px-7 inline-flex items-center gap-2"
+            >
+              Create your first design <ArrowRight size={16} />
+            </button>
+          </div>
+        </section>
+
+        {/* ── Features (bento) ── */}
+        <section id="features" className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28 scroll-mt-16">
+          <div className="grid lg:grid-cols-[1fr_1.3fr] gap-6 lg:gap-16 items-end">
+            <div>
+              <SectionLabel n="01">Features</SectionLabel>
+              <h2 className="zv-display mt-5 font-black text-4xl sm:text-6xl leading-[0.95]">
+                Everything you need <span className="italic font-normal zv-sunset-text">to create.</span>
+              </h2>
+            </div>
+            <p className="text-[var(--zv-muted)] text-[17px] leading-relaxed max-w-xl">
+              A serious editor, not a toy. Zorvie packs the features people actually use from commercial
+              design tools — minus the price tag.
+            </p>
+          </div>
+
+          <div className="mt-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {/* headline card */}
+            <div className="sm:col-span-2 lg:row-span-2 rounded-2xl border-2 border-[var(--zv-ink)] bg-[var(--zv-violet)] text-white p-7 sm:p-9 flex flex-col justify-between min-h-[320px] relative overflow-hidden">
+              <div className="absolute -right-16 -bottom-16 h-64 w-64 rounded-full bg-[var(--zv-pink)]" aria-hidden="true" />
+              <div className="absolute right-20 bottom-28 h-20 w-20 rotate-12 rounded-lg bg-[var(--zv-sun)] border-2 border-[var(--zv-ink)]" aria-hidden="true" />
+              <div className="absolute right-44 bottom-12 h-12 w-12 rounded-full bg-[var(--zv-teal)] border-2 border-[var(--zv-ink)]" aria-hidden="true" />
+              <div className="relative h-12 w-12 rounded-xl bg-[var(--zv-sun)] text-[var(--zv-ink)] border-2 border-[var(--zv-ink)] flex items-center justify-center">
+                <Shapes size={22} />
+              </div>
+              <div className="relative max-w-sm">
+                <div className="zv-mono text-[11px] uppercase text-[var(--zv-sun)]">The canvas</div>
+                <h3 className="zv-display mt-3 text-3xl sm:text-4xl font-black leading-[0.95]">Drag, drop &amp; done.</h3>
+                <p className="mt-4 text-white/80 leading-relaxed">
+                  Shapes, lines, graphics, stickers and images — move, resize and rotate everything with
+                  buttery-smooth canvas rendering.
+                </p>
+              </div>
+            </div>
+
             {FEATURES.map((f) => (
-              <div
-                key={f.title}
-                className="group rounded-2xl border border-black/8 bg-white p-6 hover:shadow-lg hover:shadow-black/5 hover:border-[#00C4CC]/40 transition-all"
-              >
-                <div className="h-11 w-11 rounded-xl flex items-center justify-center bg-brand-gradient-soft text-[#7D2AE8] group-hover:scale-105 transition-transform">
+              <div key={f.title} className="zv-press rounded-2xl border-2 border-[var(--zv-ink)] p-6 flex flex-col" style={{ background: f.soft }}>
+                <div className="h-11 w-11 rounded-xl flex items-center justify-center text-white border-2 border-[var(--zv-ink)]" style={{ background: f.color }}>
                   <f.icon size={20} />
                 </div>
-                <h3 className="mt-4 font-bold">{f.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{f.text}</p>
+                <h3 className="zv-display mt-5 text-xl font-bold leading-tight">{f.title}</h3>
+                <p className="mt-2 text-sm text-[var(--zv-ink)]/70 leading-relaxed">{f.text}</p>
               </div>
             ))}
+
+            {/* wide closing card */}
+            <div className="sm:col-span-2 rounded-2xl border-2 border-[var(--zv-ink)] bg-[var(--zv-sun)] p-6 sm:p-7 flex items-center gap-5">
+              <div className="h-12 w-12 shrink-0 rounded-full bg-[var(--zv-pink)] text-white border-2 border-[var(--zv-ink)] flex items-center justify-center">
+                <Heart size={20} className="fill-current" />
+              </div>
+              <div>
+                <h3 className="zv-display text-xl sm:text-2xl font-black leading-tight">Free &amp; open source</h3>
+                <p className="mt-1 text-sm text-[var(--zv-ink)]/75 leading-relaxed">
+                  MIT licensed and self-hostable. No accounts, no paywalls, no locked premium elements.
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
         {/* ── Templates ── */}
-        <section id="templates" className="bg-[#FAFAFC] border-y border-black/5 py-20 sm:py-28">
+        <section
+          id="templates"
+          className="border-y-2 border-[var(--zv-ink)] py-20 sm:py-28 scroll-mt-16 overflow-hidden bg-[linear-gradient(135deg,var(--zv-violet-soft)_0%,var(--zv-pink-soft)_50%,var(--zv-peach-soft)_100%)]"
+        >
           <div className="mx-auto max-w-7xl px-4 sm:px-6">
-            <div className="text-center">
-              <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-                Start from a <span className="text-brand-gradient">template</span>
-              </h2>
-              <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-                Sized and styled for every platform. Open one, tweak everything.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
+              <div>
+                <SectionLabel n="02" color="var(--zv-pink)">Templates</SectionLabel>
+                <h2 className="zv-display mt-5 font-black text-4xl sm:text-6xl leading-[0.95]">
+                  Start from a <span className="italic font-normal text-[var(--zv-pink)]">template.</span>
+                </h2>
+                <p className="mt-4 text-[var(--zv-ink)]/70 max-w-md">Sized and styled for every platform. Open one, tweak everything.</p>
+              </div>
+              <button
+                onClick={goDashboard}
+                className="self-start sm:self-auto zv-press rounded-full border-2 border-[var(--zv-ink)] bg-white font-bold h-12 px-6 inline-flex items-center gap-2"
+              >
+                Browse all templates <ArrowRight size={16} />
+              </button>
             </div>
-            <div className="mt-12 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-              {TEMPLATE_SHOWCASE.map((t) => (
+
+            <div className="mt-14 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-5 gap-y-10">
+              {TEMPLATES.map((t) => (
                 <button
                   key={t.label}
                   onClick={goDashboard}
@@ -260,69 +429,81 @@ export function Landing() {
                   aria-label={`Open ${t.label} templates`}
                 >
                   <div
-                    className="aspect-[4/5] rounded-xl overflow-hidden shadow-sm group-hover:shadow-xl group-hover:-translate-y-1 transition-all flex flex-col items-center justify-center gap-3 border border-black/5"
-                    style={{ background: `linear-gradient(140deg, ${t.from}, ${t.to})` }}
+                    className="aspect-[4/5] rounded-xl border-2 border-[var(--zv-ink)] p-3.5 flex flex-col justify-between shadow-[4px_4px_0_var(--zv-ink)] transition-transform duration-300 ease-out [transform:rotate(var(--zv-r))] group-hover:[transform:translateY(-8px)_rotate(0deg)]"
+                    style={{ background: t.bg, color: t.fg, '--zv-r': t.r } as CSSProperties}
                   >
-                    <t.icon size={22} className={t.dark ? 'text-[#1F2226]' : 'text-white'} />
-                    <div className={`text-sm font-extrabold tracking-wide ${t.dark ? 'text-[#1F2226]' : 'text-white'}`}>
-                      {t.title}
-                    </div>
+                    <span className="zv-mono text-[9px] uppercase opacity-80">{t.size}</span>
+                    <span className="zv-display font-black text-[26px] sm:text-[30px] leading-[0.85]">{t.title}</span>
                   </div>
-                  <div className="mt-2 text-sm font-medium text-center group-hover:text-[#7D2AE8] transition-colors">
+                  <div className="mt-4 flex items-center justify-between text-sm font-bold">
                     {t.label}
+                    <span className="h-6 w-6 rounded-full bg-[var(--zv-ink)] text-white flex items-center justify-center opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all">
+                      <ArrowRight size={12} />
+                    </span>
                   </div>
                 </button>
               ))}
             </div>
-            <div className="mt-10 text-center">
-              <Button variant="outline" className="rounded-full px-6 gap-2" onClick={goDashboard}>
-                Browse all templates <ArrowRight size={16} />
-              </Button>
-            </div>
           </div>
         </section>
 
-        {/* ── Open source ── */}
-        <section id="opensource" className="mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28">
-          <div className="rounded-3xl overflow-hidden bg-[#17181D] text-white relative">
-            <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full blur-3xl opacity-25 bg-[#7D2AE8]" aria-hidden="true" />
-            <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full blur-3xl opacity-25 bg-[#00C4CC]" aria-hidden="true" />
-            <div className="relative px-6 sm:px-12 py-14 sm:py-20 grid lg:grid-cols-2 gap-10 items-center">
-              <div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold text-[#00C4CC]">
-                  <Star size={14} /> Built in the open
-                </div>
-                <h2 className="mt-5 text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
-                  The design tool that <span className="text-[#00C4CC]">belongs to you</span>
-                </h2>
-                <p className="mt-5 text-white/70 leading-relaxed">
-                  Commercial design tools lock your creativity behind subscriptions. Canvix is
-                  different — the code is on GitHub, the license is MIT, and every design you make
-                  is exportable at full quality. Self-host it, fork it, improve it.
-                </p>
-                <div className="mt-8 flex flex-col sm:flex-row gap-3">
-                  <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
-                    <Button size="lg" className="btn-brand-gradient rounded-full px-8 gap-2 h-12">
-                      <Github size={18} /> View the source
-                    </Button>
-                  </a>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="rounded-full px-8 h-12 border-white/20 text-white hover:bg-white/10 hover:text-white"
-                    onClick={goDashboard}
-                  >
-                    Try it now
-                  </Button>
-                </div>
+        {/* ── Open source / CTA ── */}
+        <section id="opensource" className="relative overflow-hidden bg-[linear-gradient(135deg,var(--zv-orange)_0%,var(--zv-pink)_100%)] border-b-2 border-[var(--zv-ink)] scroll-mt-16">
+          {/* rotating sun */}
+          <svg
+            className="zv-spin-slow absolute -right-40 -top-40 h-[520px] w-[520px] opacity-90"
+            viewBox="0 0 200 200"
+            aria-hidden="true"
+          >
+            {Array.from({ length: 24 }, (_, i) => (
+              <rect key={i} x="98" y="4" width="4" height="34" rx="2" fill="var(--zv-sun)" transform={`rotate(${i * 15} 100 100)`} />
+            ))}
+            <circle cx="100" cy="100" r="46" fill="var(--zv-sun)" />
+          </svg>
+
+          <div className="relative mx-auto max-w-7xl px-4 sm:px-6 py-20 sm:py-28 grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <SectionLabel n="03" color="var(--zv-violet)">Open source</SectionLabel>
+              <h2 className="zv-display mt-5 font-black text-4xl sm:text-6xl leading-[0.95] text-[var(--zv-ink)]">
+                The design tool that <span className="italic font-normal text-white">belongs to you.</span>
+              </h2>
+              <p className="mt-6 text-[var(--zv-ink)]/85 text-[17px] leading-relaxed max-w-lg">
+                Commercial design tools lock your creativity behind subscriptions. Zorvie is different — the
+                code is open source, the license is MIT, and every design you make is exportable at full
+                quality. Self-host it, fork it, improve it.
+              </p>
+              <div className="mt-9 flex flex-col sm:flex-row gap-4">
+                <button
+                  onClick={goDashboard}
+                  className="zv-press rounded-full border-2 border-[var(--zv-ink)] bg-[var(--zv-ink)] text-[var(--zv-paper)] font-extrabold h-14 px-8 inline-flex items-center justify-center gap-2"
+                >
+                  Try it now <ArrowRight size={18} />
+                </button>
+                <a
+                  href={REPO_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="zv-press rounded-full border-2 border-[var(--zv-ink)] bg-white text-[var(--zv-ink)] font-extrabold h-14 px-8 inline-flex items-center justify-center gap-2"
+                >
+                  <Github size={18} /> View on GitHub
+                </a>
               </div>
-              <div className="font-mono text-xs sm:text-sm leading-relaxed bg-black/40 rounded-xl border border-white/10 p-5 overflow-x-auto">
-                <div className="text-white/40"># clone &amp; run your own Canva alternative</div>
-                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">git clone https://github.com/mir-ashiq/canvix</span></div>
-                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">cd canvix &amp;&amp; bun install</span></div>
-                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">bun run db:push &amp;&amp; bun run db:seed</span></div>
-                <div><span className="text-[#FF5C8A]">$</span> <span className="text-white/90">bun run dev</span></div>
-                <div className="mt-3 text-[#34C77B]">✓ ready on http://localhost:3000</div>
+            </div>
+
+            <div className="zv-mono text-xs sm:text-sm leading-relaxed bg-[var(--zv-ink)] text-[var(--zv-paper)] rounded-2xl border-2 border-[var(--zv-ink)] shadow-[8px_8px_0_rgba(23,19,15,0.35)] overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
+                <span className="h-2.5 w-2.5 rounded-full bg-[var(--zv-pink)]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[var(--zv-sun)]" />
+                <span className="h-2.5 w-2.5 rounded-full bg-[var(--zv-teal)]" />
+                <span className="ml-3 text-[10px] uppercase text-white/40">~/zorvie</span>
+              </div>
+              <div className="p-5 sm:p-6 overflow-x-auto whitespace-nowrap">
+                <div className="text-white/40"># run your own design studio</div>
+                <div><span className="text-[var(--zv-pink)]">$</span> git clone {REPO_URL}.git</div>
+                <div><span className="text-[var(--zv-pink)]">$</span> cd zorvie &amp;&amp; bun install</div>
+                <div><span className="text-[var(--zv-pink)]">$</span> bun run db:push &amp;&amp; bun run db:seed</div>
+                <div><span className="text-[var(--zv-pink)]">$</span> bun run dev</div>
+                <div className="mt-3 text-[var(--zv-teal)]">✓ ready on http://localhost:3000</div>
               </div>
             </div>
           </div>
@@ -330,20 +511,27 @@ export function Landing() {
       </main>
 
       {/* ── Footer ── */}
-      <footer className="mt-auto border-t border-black/5 bg-white">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Logo size={24} />
-            <span className="text-sm text-muted-foreground">
-              © 2026 Canvix · MIT License
-            </span>
+      <footer className="bg-[var(--zv-ink)] text-[var(--zv-paper)] overflow-hidden">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-14 pb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <Logo size={28} />
+            <div className="flex flex-wrap items-center gap-6 zv-mono text-[11px] uppercase text-[var(--zv-paper)]/60">
+              <a href="#features" className="hover:text-[var(--zv-sun)] transition-colors">Features</a>
+              <a href="#templates" className="hover:text-[var(--zv-pink)] transition-colors">Templates</a>
+              <a href="#opensource" className="hover:text-[var(--zv-teal)] transition-colors">Open source</a>
+              <a href={REPO_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 hover:text-[var(--zv-sky)] transition-colors">
+                <Github size={13} /> GitHub
+              </a>
+            </div>
           </div>
-          <div className="flex items-center gap-5 text-sm text-muted-foreground">
-            <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer" className="hover:text-foreground transition-colors inline-flex items-center gap-1.5">
-              <Github size={15} /> GitHub
-            </a>
-            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#templates" className="hover:text-foreground transition-colors">Templates</a>
+          <div className="zv-display zv-sunset-text opacity-90 font-black leading-[0.85] text-[26vw] lg:text-[300px] mt-10 select-none text-center" aria-hidden="true">
+            Zorvie
+          </div>
+          <div className="mt-8 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-[var(--zv-paper)]/55">
+            <span>© 2026 Zorvie</span>
+            <span>
+              Developed by <span className="font-bold text-[var(--zv-sun)]">Talha Hussain</span>
+            </span>
           </div>
         </div>
       </footer>

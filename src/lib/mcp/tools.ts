@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// Canvix MCP tools — every tool maps to a real subsystem
+// Zorvie MCP tools — every tool maps to a real subsystem
 // (Design/Template/Comment tables, element factories, the SVG
 // exporter, animations, the AI provider layer). No vaporware.
 // ─────────────────────────────────────────────────────────────
@@ -201,7 +201,7 @@ async function fetchImageAsDataUrl(url: string): Promise<{ src: string; width: n
   const res = await fetch(url, {
     signal: AbortSignal.timeout(10_000),
     redirect: 'follow',
-    headers: { 'user-agent': 'Canvix-MCP/0.6 (image fetch)' },
+    headers: { 'user-agent': 'Zorvie-MCP/0.6 (image fetch)' },
   })
   if (!res.ok) throw new Error(`Fetch failed with HTTP ${res.status}.`)
   const type = (res.headers.get('content-type') ?? '').split(';')[0].trim()
@@ -240,7 +240,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
   const listTemplates: ToolDef = {
     name: 'list_templates',
     description:
-      'Browse Canvix starter templates. Returns id, name, category, dimensions and page count. Use a template_id with create_design to start a design from it.',
+      'Browse Zorvie starter templates. Returns id, name, category, dimensions and page count. Use a template_id with create_design to start a design from it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -277,7 +277,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
 
   const searchDesigns: ToolDef = {
     name: 'search_designs',
-    description: "Search the user's Canvix designs by name. Returns id, name, dimensions, updatedAt and the edit URL.",
+    description: "Search the user's Zorvie designs by name. Returns id, name, dimensions, updatedAt and the edit URL.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -366,7 +366,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
   const createDesign: ToolDef = {
     name: 'create_design',
     description:
-      'Create a new, fully editable Canvix design — blank (set width/height) or from a template (pass template_id from list_templates). Returns the design id + edit URL. This does NOT use AI; for AI generation see generate_design.',
+      'Create a new, fully editable Zorvie design — blank (set width/height) or from a template (pass template_id from list_templates). Returns the design id + edit URL. This does NOT use AI; for AI generation see generate_design.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -408,7 +408,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
   const generateDesign: ToolDef = {
     name: 'generate_design',
     description:
-      'Generate a complete, editable design from a text description using the server AI provider (layouts, colors, typography as real Canvix elements — not a flat image). Requires an AI provider on the server; without one, use create_design with a template instead. Provide a detailed brief: purpose, headline, sub copy, palette, page size.',
+      'Generate a complete, editable design from a text description using the server AI provider (layouts, colors, typography as real Zorvie elements — not a flat image). Requires an AI provider on the server; without one, use create_design with a template instead. Provide a detailed brief: purpose, headline, sub copy, palette, page size.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -440,7 +440,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
         .join(', ')
 
       const system = [
-        'You generate structured designs for the Canvix editor. Reply with ONLY a JSON object (no markdown fences) of shape:',
+        'You generate structured designs for the Zorvie editor. Reply with ONLY a JSON object (no markdown fences) of shape:',
         '{"name":string,"pages":[{"background":{"type":"solid","color":"#RRGGBB"}|{"type":"gradient","from":"#RRGGBB","to":"#RRGGBB","angle":number},',
         '"elements":[ ... ]}]}',
         `Element types (all coordinates in px on a ${width}x${height} page):`,
@@ -1026,7 +1026,7 @@ export function buildTools(deps: ToolDeps): ToolDef[] {
 
   const getCapabilities: ToolDef = {
     name: 'get_capabilities',
-    description: 'Report server capabilities: Canvix version, AI provider availability, and how the server is secured.',
+    description: 'Report server capabilities: Zorvie version, AI provider availability, and how the server is secured.',
     inputSchema: { type: 'object', properties: {} },
     handler: async () => {
       return ok({

@@ -128,7 +128,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
 
   return (
     <div className="flex flex-col">
-      <AppHeader icon={Bot} title="Canvix AI assistant" onClose={onClose} />
+      <AppHeader icon={Bot} title="Zorvie AI assistant" onClose={onClose} />
 
       {/* AI provider missing — honest notice */}
       {aiLoaded && !aiConfigured && (
@@ -252,7 +252,7 @@ export function AssistantApp({ onClose }: AppPanelProps) {
             placeholder="Ask your copilot…"
             maxLength={800}
             className="w-full bg-transparent outline-none text-[12.5px] text-white placeholder:text-white/35 h-10"
-            aria-label="Message the Canvix AI assistant"
+            aria-label="Message the Zorvie AI assistant"
           />
         </div>
         <button

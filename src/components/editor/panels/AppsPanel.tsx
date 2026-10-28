@@ -23,16 +23,7 @@ export function AppsPanel() {
           ))}
           <div className="col-span-2 mt-1 rounded-xl border border-dashed border-white/12 p-3 text-center">
             <p className="text-[11px] text-white/40 leading-relaxed">
-              Canvix apps are open —{' '}
-              <a
-                href="https://github.com/mir-ashiq/canvix"
-                target="_blank"
-                rel="noreferrer"
-                className="text-[#02C0CC] hover:underline"
-              >
-                build your own
-              </a>{' '}
-              by registering a component in <code className="text-white/60">apps/registry.tsx</code>.
+              Zorvie apps are open — build your own by registering a component in <code className="text-white/60">apps/registry.tsx</code>.
             </p>
           </div>
         </div>

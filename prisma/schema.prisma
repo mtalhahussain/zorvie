@@ -1,3 +1,12 @@
+// Two schemas, one data model:
+//   prisma/schema.prisma        → PostgreSQL
+//   prisma/schema.mysql.prisma  → MySQL
+// Keep them identical except the datasource provider (checked by
+// `bun run db:check-schemas`). Only MySQL-only size types (@db.MediumText /
+// @db.LongText) may differ — Postgres `text` is already unbounded.
+// Every change needs a migration in BOTH prisma/migrations and
+// prisma/migrations-mysql — see README "Database".
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,7 +22,7 @@ model Design {
   name       String          @default("Untitled design")
   width      Int             @default(1080)
   height     Int             @default(1080)
-  // Structured document: { pages: PageData[], ... } — stored as native jsonb
+  // Structured document: { pages: PageData[], ... } — jsonb on Postgres, JSON on MySQL
   pages      Json            @default("[]")
   thumbnail  String?         // small dataURL preview
   source     String          @default("blank") // blank | template:<id> | duplicate:<id> | resize:<id>
@@ -92,7 +101,7 @@ model Comment {
   authorId    String
   authorName  String
   authorColor String
-  body        String
+  body        String    @db.Text // up to 2000 chars — over MySQL's VARCHAR(191) default
   parentId    String? // reply threading
   resolved    Boolean   @default(false)
   createdAt   DateTime  @default(now())

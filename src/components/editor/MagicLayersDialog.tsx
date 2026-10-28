@@ -308,9 +308,9 @@ export function MagicLayersDialog({ open, onOpenChange }: { open: boolean; onOpe
                 <Sparkles size={12} className="text-[#02C0CC]" /> How it works
               </div>
               <p>
-                A vision model detects text, photos, shapes and the background, then Canvix rebuilds each region as a
+                A vision model detects text, photos, shapes and the background, then Zorvie rebuilds each region as a
                 <strong className="text-white/80"> native editable element</strong>. Exact fonts can&apos;t be recovered —
-                the closest family from the Canvix library is used. Uncertain regions are flagged so you can review them.
+                the closest family from the Zorvie library is used. Uncertain regions are flagged so you can review them.
               </p>
             </div>
           </div>

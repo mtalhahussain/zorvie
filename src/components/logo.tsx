@@ -1,6 +1,17 @@
 import { cn } from '@/lib/utils'
 
-/** Canvix gradient logo mark — stacked design layers */
+const SUN_RAYS: [number, number, number, number][] = [
+  [24, 12, 24, 8],
+  [24, 36, 24, 40],
+  [12, 24, 8, 24],
+  [36, 24, 40, 24],
+  [32.5, 15.5, 35.3, 12.7],
+  [15.5, 15.5, 12.7, 12.7],
+  [32.5, 32.5, 35.3, 35.3],
+  [15.5, 32.5, 12.7, 35.3],
+]
+
+/** Zorvie gradient logo mark — a rising sun */
 export function LogoMark({ className, size = 36 }: { className?: string; size?: number }) {
   return (
     <svg
@@ -13,18 +24,17 @@ export function LogoMark({ className, size = 36 }: { className?: string; size?: 
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id="canvix-grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#00C4CC" />
-          <stop offset="0.55" stopColor="#7D2AE8" />
-          <stop offset="1" stopColor="#FF5C8A" />
+        <linearGradient id="zorvie-grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#FFC93C" />
+          <stop offset="0.55" stopColor="#FF8A00" />
+          <stop offset="1" stopColor="#FF4E50" />
         </linearGradient>
       </defs>
-      <rect width="48" height="48" rx="12" fill="url(#canvix-grad)" />
-      {/* stacked design layers */}
-      <rect x="12" y="10" width="24" height="8" rx="3" fill="#FFFFFF" fillOpacity="0.45" />
-      <rect x="12" y="21" width="24" height="8" rx="3" fill="#FFFFFF" fillOpacity="0.7" />
-      <rect x="12" y="32" width="16" height="6" rx="3" fill="#FFFFFF" />
-      <circle cx="36.5" cy="35" r="2.5" fill="#FFFFFF" fillOpacity="0.9" />
+      <rect width="48" height="48" rx="12" fill="url(#zorvie-grad)" />
+      <circle cx="24" cy="24" r="7.5" fill="#FFFFFF" />
+      {SUN_RAYS.map(([x1, y1, x2, y2]) => (
+        <line key={`${x1}-${y1}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#FFFFFF" strokeWidth="3" strokeLinecap="round" />
+      ))}
     </svg>
   )
 }
@@ -38,13 +48,13 @@ export function Logo({ className, size = 32 }: { className?: string; size?: numb
         className="font-extrabold tracking-tight leading-none"
         style={{
           fontSize: size * 0.62,
-          background: 'linear-gradient(120deg, #00C4CC 0%, #7D2AE8 55%, #FF5C8A 100%)',
+          background: 'linear-gradient(120deg, #FFB000 0%, #FF8A00 55%, #FF4E50 100%)',
           WebkitBackgroundClip: 'text',
           backgroundClip: 'text',
           color: 'transparent',
         }}
       >
-        canvix
+        Zorvie
       </span>
     </span>
   )

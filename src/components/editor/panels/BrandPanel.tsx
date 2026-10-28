@@ -331,7 +331,7 @@ function FontRow({ label, font, onChange, onApply }: { label: string; font: stri
       <select
         value={font}
         onChange={(e) => onChange(e.target.value)}
-        className="flex-1 min-w-0 h-10 rounded-xl bg-white/[0.05] border border-white/10 text-white text-[13px] px-2 outline-none focus:border-[#7630D7] [color-scheme:dark]"
+        className="flex-1 min-w-0 h-10 rounded-xl bg-white/[0.05] border border-white/10 text-white text-[13px] px-2 outline-none focus:border-[#7630D7] [color-scheme:dark] [&_option]:bg-[#1C1E24] [&_option]:text-white"
         aria-label={`Brand ${label} font`}
       >
         {FONTS.map((f) => (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Github, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap } from 'lucide-react'
+import { Home, MessageCircle, Play, Share2, ChevronDown, Undo2, Redo2, Download, Cloud, Check, Loader2, Ruler, History, Languages, Wand2, Zap } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useEditorStore } from '@/store/editor-store'
 import { Button } from '@/components/ui/button'
@@ -106,11 +106,6 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
           <DropdownMenuSeparator className="bg-white/10" />
           <DropdownMenuItem className="gap-2" onClick={onShortcuts}>
             Keyboard shortcuts
-          </DropdownMenuItem>
-          <DropdownMenuItem className="gap-2" asChild>
-            <a href="https://github.com/mir-ashiq/canvix" target="_blank" rel="noreferrer">
-              <Github size={15} /> GitHub repository
-            </a>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

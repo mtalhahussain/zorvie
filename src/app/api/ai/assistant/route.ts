@@ -257,7 +257,7 @@ export async function POST(req: NextRequest) {
     ].join('\n')
 
     const system =
-      'You are the Canvix AI assistant 2.0 — a design-aware copilot embedded in a graphic-design editor ' +
+      'You are the Zorvie AI assistant 2.0 — a design-aware copilot embedded in a graphic-design editor ' +
       '(similar to Canva AI). You understand the CURRENT design: its elements, colors, typography, layout and page size. ' +
       'You help users improve their design through STRUCTURED EDITOR ACTIONS, not code.\n\n' +
       'Respond ONLY with a JSON object: {"reply": string, "actions": DesignAction[]}\n\n' +

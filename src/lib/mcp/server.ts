@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// Canvix MCP server — MCP 2025-03-26 "Streamable HTTP" transport
+// Zorvie MCP server — MCP 2025-03-26 "Streamable HTTP" transport
 // (stateless profile): every client message is an HTTP POST of a
 // JSON-RPC 2.0 request/notification/response; the server answers
 // requests with one application/json object, notifications with
@@ -74,7 +74,7 @@ export function checkAuth(req: NextRequest): JsonRpcResponse | null {
       error: {
         code: SERVER_NOT_CONFIGURED,
         message:
-          'The Canvix MCP server is disabled: set CANVIX_MCP_TOKEN in the server environment to enable it. See README → "AI agents (MCP)".',
+          'The Zorvie MCP server is disabled: set CANVIX_MCP_TOKEN in the server environment to enable it. See README → "AI agents (MCP)".',
       },
     }
   }
@@ -143,10 +143,10 @@ export function handleInitialize(msg: JsonRpcRequest): JsonRpcResponse {
       serverInfo: {
         name: 'canvix',
         version: SERVER_VERSION,
-        title: 'Canvix — open-source design tool',
+        title: 'Zorvie — open-source design tool',
       },
       instructions:
-        'Canvix is a self-hosted, open-source design tool. Every tool creates or edits REAL, editable designs: ' +
+        'Zorvie is a self-hosted, open-source design tool. Every tool creates or edits REAL, editable designs: ' +
         'create/generate designs, add text/shapes/images/tables/embeds, restyle, animate, comment and export (svg/png/json). ' +
         'Start with get_capabilities, then list_templates / search_designs. Edits made here appear live to humans in the editor.',
     },

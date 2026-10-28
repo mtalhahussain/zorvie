@@ -206,7 +206,7 @@ export function ExportDialog({ open, onOpenChange }: { open: boolean; onOpenChan
                 </p>
                 <p>
                   {videoFormat ? (
-                    <>Format: <strong>{videoFormat.label}</strong>{videoFormat.extension === 'webm' && <> — this browser can’t encode MP4, so Canvix produces WebM (plays everywhere)</>}</>
+                    <>Format: <strong>{videoFormat.label}</strong>{videoFormat.extension === 'webm' && <> — this browser can’t encode MP4, so Zorvie produces WebM (plays everywhere)</>}</>
                   ) : (
                     <span className="text-red-500">This browser cannot record video — try Chrome or Edge.</span>
                   )}
