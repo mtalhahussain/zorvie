@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withProvider } from '@/lib/ai/provider'
+import { withProvider, TEXT_MODEL } from '@/lib/ai/provider'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
 
   return withProvider('translate', req, { limit: 15, windowSec: 60 }, async (zai) => {
     const completion = await zai.chat.completions.create({
+      model: TEXT_MODEL,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },

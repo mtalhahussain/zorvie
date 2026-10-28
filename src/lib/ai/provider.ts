@@ -26,7 +26,13 @@ export interface AIProviderConfig {
 }
 
 /** VISION_MODEL — the multimodal model used for Magic Layers analysis. */
-export const VISION_MODEL = 'glm-4.5v'
+export const VISION_MODEL = process.env.ZAI_VISION_MODEL?.trim() || 'glm-4.5v'
+
+/** TEXT_MODEL — chat model for Magic Write, Assistant and Translate. Z.ai rejects requests without one. */
+export const TEXT_MODEL = process.env.ZAI_TEXT_MODEL?.trim() || 'glm-4.5-flash'
+
+/** IMAGE_MODEL — image generation model. Z.ai rejects requests without one. */
+export const IMAGE_MODEL = process.env.ZAI_IMAGE_MODEL?.trim() || 'cogView-4-250304'
 
 /**
  * Resolve the provider configuration.

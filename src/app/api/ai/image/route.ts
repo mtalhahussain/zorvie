@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withProvider } from '@/lib/ai/provider'
+import { withProvider, IMAGE_MODEL } from '@/lib/ai/provider'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -26,16 +26,26 @@ export async function POST(req: NextRequest) {
 
   return withProvider('image', req, { limit: 12, windowSec: 60 }, async (zai) => {
     const response = await zai.images.generations.create({
+      model: IMAGE_MODEL,
       prompt,
       size,
     })
 
-    const base64 = response.data[0]?.base64
-    if (!base64) {
+    // Z.ai's public API returns a temporary URL; other providers inline base64
+    const item = response.data[0] as { base64?: string; url?: string } | undefined
+    let dataUrl = item?.base64 ? `data:image/png;base64,${item.base64}` : null
+    if (!dataUrl && item?.url) {
+      const img = await fetch(item.url)
+      if (img.ok) {
+        const type = img.headers.get('content-type') || 'image/png'
+        dataUrl = `data:${type};base64,${Buffer.from(await img.arrayBuffer()).toString('base64')}`
+      }
+    }
+    if (!dataUrl) {
       return NextResponse.json({ error: 'The image service returned no image. Try again.' }, { status: 502 })
     }
 
     const [w, h] = size.split('x').map(Number)
-    return NextResponse.json({ dataUrl: `data:image/png;base64,${base64}`, width: w, height: h })
+    return NextResponse.json({ dataUrl, width: w, height: h })
   })
 }
