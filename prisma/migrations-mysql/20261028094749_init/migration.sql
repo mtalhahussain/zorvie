@@ -1,11 +1,11 @@
 -- DropForeignKey
-ALTER TABLE `designversion` DROP FOREIGN KEY `DesignVersion_designId_fkey`;
+ALTER TABLE `DesignVersion` DROP FOREIGN KEY `DesignVersion_designId_fkey`;
 
 -- DropIndex
-DROP INDEX `DesignEvent_designId_id_idx` ON `designevent`;
+DROP INDEX `DesignEvent_designId_id_idx` ON `DesignEvent`;
 
 -- DropIndex
-DROP INDEX `DesignVersion_designId_createdAt_idx` ON `designversion`;
+DROP INDEX `DesignVersion_designId_createdAt_idx` ON `DesignVersion`;
 
 -- CreateIndex
 CREATE INDEX `DesignEvent_designId_id_idx` ON `DesignEvent`(`designId`, `id` DESC);
