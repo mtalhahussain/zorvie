@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic'
 import { useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
+import { toast } from '@/hooks/use-toast'
 import { Landing } from '@/components/landing/Landing'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 
@@ -27,7 +28,16 @@ function DeepLinkHandler() {
       if (!designId || !/^[a-zA-Z0-9_-]{5,40}$/.test(designId)) return
       const openEditor = useAppStore.getState().openEditor
       void fetch(`/api/designs/${encodeURIComponent(designId)}`)
-        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => {
+          if (r.status === 404) {
+            toast({
+              title: 'This design is private',
+              description: 'Ask its owner to set sharing to “Anyone with the link”.',
+              variant: 'destructive',
+            })
+          }
+          return r.ok ? r.json() : null
+        })
         .then((design) => {
           if (design && Array.isArray(design.pages)) {
             openEditor(design)

@@ -276,7 +276,7 @@ export async function POST(req: NextRequest) {
       '- {"type":"addPage"} / {"type":"duplicatePage"}\n' +
       '- {"type":"generateImage","prompt":str} — generates an AI image and adds it\n' +
       '- {"type":"suggestPalette","colors":["#hex",...3-5]}\n' +
-      '- {"type":"translate","language":str}\n' +
+      '- {"type":"translate","language":str} — language "original" restores the untranslated design\n' +
       '- {"type":"magicAnimate"} — one-click tasteful animations\n' +
       '- {"type":"balanceLayout"} / {"type":"magicLayout"} — improve spacing/alignment/balance\n\n' +
       'RULES:\n' +

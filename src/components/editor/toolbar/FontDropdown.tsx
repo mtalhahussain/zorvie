@@ -19,7 +19,7 @@ export function FontDropdown({ value, onChange }: FontDropdownProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [cat, setCat] = useState<string>('All')
 
-  const cats = ['All', 'sans', 'serif', 'display', 'handwriting', 'mono']
+  const cats = ['All', 'sans', 'serif', 'display', 'handwriting', 'mono', 'world']
 
   const list = useMemo(
     () =>

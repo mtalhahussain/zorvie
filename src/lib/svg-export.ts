@@ -202,7 +202,9 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
       const lines = wrapText(rendered, t.fontFamily, t.fontSize, t.bold, t.width)
       const lineHeight = t.fontSize * t.lineHeight
       const fill = t.fillGradient ? gradientRefFor(t, ctx) : t.fill
-      const anchor = t.align === 'center' ? 'middle' : t.align === 'right' ? 'end' : 'start'
+      // in RTL text, SVG 'start'/'end' are mirrored — flip them so the anchor still sits at anchorX
+      const rtl = t.direction === 'rtl'
+      const anchor = t.align === 'center' ? 'middle' : (t.align === 'right') !== rtl ? 'end' : 'start'
       const anchorX = t.align === 'center' ? t.x + t.width / 2 : t.align === 'right' ? t.x + t.width : t.x
       // first baseline ≈ top + ascent (0.8 × fontSize approximates Konva's ascent)
       const firstBaseline = t.y + t.fontSize * 0.8
@@ -218,6 +220,7 @@ function serializeElement(el: AnyElement, ctx: SvgContext): string {
         decor ? `text-decoration="${decor}"` : '',
         t.letterSpacing ? `letter-spacing="${t.letterSpacing}"` : '',
         `text-anchor="${anchor}"`,
+        rtl ? 'direction="rtl"' : '',
         `fill="${fill}"`,
         opacityAttr(t),
         shadowAttrs(t, ctx),

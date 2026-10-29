@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { authorizeDesign } from '@/lib/design-access'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,8 @@ export const maxDuration = 300 // Vercel-friendly bounded stream duration
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
   const { designId } = await params
+  const auth = await authorizeDesign(req, designId, 'edit')
+  if (auth.error) return auth.error
   const pid = req.nextUrl.searchParams.get('pid')?.slice(0, 40) ?? ''
   let since = Number(req.nextUrl.searchParams.get('since'))
   if (!Number.isFinite(since) || since < 0) since = 0

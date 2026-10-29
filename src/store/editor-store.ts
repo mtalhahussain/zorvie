@@ -228,9 +228,9 @@ interface EditorState {
   setBrand: (b: BrandKit) => void
   resizeDesign: (width: number, height: number) => void
 
-  // v0.4: magic translate — batch-update text elements across ALL pages
-  // (text elements get `text`; table elements get per-cell `cells` patches)
-  translateTexts: (updates: { id: string; text?: string; cells?: { index: number; text: string }[] }[]) => void
+  // magic translate — swap in already-transformed pages (translate / restore
+  // original) across ALL pages as one undo step
+  replacePagesForTranslate: (pages: PageData[]) => void
 
   // v0.5: magic layers — bulk element insertion + page replacement
   addElementsBulk: (els: AnyElement[]) => void
@@ -840,25 +840,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   // ── v0.4: magic translate ────────────────────────────
-  translateTexts: (updates) => {
-    if (!updates.length) return
+  replacePagesForTranslate: (pages) => {
     get().pushHistory()
-    const { pages, version } = get()
-    const map = new Map(updates.map((u) => [u.id, u]))
-    const applyTexts = (els: AnyElement[]): AnyElement[] =>
-      els.map((el) => {
-        if (el.type === 'group') return { ...el, children: applyTexts(el.children) }
-        const u = map.get(el.id)
-        if (!u) return el
-        if (el.type === 'table' && u.cells?.length) {
-          const byIndex = new Map(u.cells.map((c) => [c.index, c.text]))
-          return { ...el, cells: el.cells.map((c, i) => (byIndex.has(i) ? { ...c, text: byIndex.get(i)! } : c)) }
-        }
-        if (el.type === 'text' && typeof u.text === 'string') return { ...el, text: u.text }
-        return el
-      })
-    const next = clone(pages).map((p) => ({ ...p, elements: applyTexts(p.elements) }))
-    set({ pages: next, version: version + 1, dirty: true })
+    const next = clone(pages)
+    set({ pages: next, version: get().version + 1, dirty: true })
     emit({ kind: 'pages:replace', pages: next })
   },
 

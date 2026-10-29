@@ -130,6 +130,24 @@ export interface TextElement extends BaseElement {
   effectBackground?: string
   /** canva-style effect preset */
   effect?: TextEffect
+  /** text direction — 'rtl' for Arabic / Urdu / Hebrew / Persian */
+  direction?: 'ltr' | 'rtl'
+  /** translate: snapshot of the pre-translation text so the design can be restored */
+  i18n?: TextI18n
+}
+
+/** Snapshot taken the first time an element is translated. Every later
+ *  translation starts from `source`, so switching languages never drifts. */
+export interface TextI18n {
+  /** language code currently shown (e.g. 'ur') */
+  lang: string
+  source: string
+  sourceFontFamily: string
+  sourceFontSize: number
+  sourceAlign: TextAlign
+  sourceDirection?: 'ltr' | 'rtl'
+  sourceLineHeight?: number
+  sourceHeight?: number
 }
 
 export interface ShapeElement extends BaseElement {
@@ -197,6 +215,8 @@ export interface TableCell {
   /** cell fill — undefined = transparent (table bg shows) */
   fill?: string
   bold?: boolean
+  /** translate: original cell text (set while the design is translated) */
+  source?: string
 }
 
 /** Canva-style native table — rendered as rect + text per cell, every cell editable. */
@@ -219,6 +239,8 @@ export interface TableElement extends BaseElement {
   textColor: string
   fontSize: number
   fontFamily: string
+  /** translate: language shown + font before translation (cells keep their own `source`) */
+  i18n?: { lang: string; sourceFontFamily: string }
 }
 
 export const FRAME_SHAPES = ['rect', 'ellipse', 'triangle', 'hexagon', 'circle'] as const
@@ -256,6 +278,8 @@ export interface EmbedElement extends BaseElement {
   title?: string
   /** dominant card tint */
   tint: string
+  /** translate: original title (set while the design is translated) */
+  sourceTitle?: string
 }
 
 /** Brand kit — persisted per browser (localStorage) */

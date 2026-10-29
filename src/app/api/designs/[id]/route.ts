@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { authorizeDesign, DESIGN_ACCESS, type DesignAccess } from '@/lib/design-access'
 
 // Normalise incoming pages payload (accepts object or legacy JSON string)
 // into a value suitable for the Postgres jsonb column.
@@ -12,12 +13,17 @@ function toPages(value: unknown): Prisma.InputJsonValue {
 }
 
 // GET /api/designs/[id] — full design incl. pages
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// (owner, or anyone with the link when the design is shared)
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
+    const auth = await authorizeDesign(req, id, 'edit')
+    if (auth.error) return auth.error
     const design = await db.design.findUnique({ where: { id } })
     if (!design) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    return NextResponse.json({ ...design, pages: design.pages ?? [] })
+    // never hand the owner's session id to collaborators
+    const { ownerId: _ownerId, ...rest } = design
+    return NextResponse.json({ ...rest, pages: design.pages ?? [], isOwner: auth.grant.isOwner })
   } catch (error) {
     console.error('GET /api/designs/[id] failed', error)
     return NextResponse.json({ error: 'Failed to get design' }, { status: 500 })
@@ -29,7 +35,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json()
+    const auth = await authorizeDesign(req, id, body.access !== undefined ? 'own' : 'edit')
+    if (auth.error) return auth.error
     const data: Record<string, unknown> = {}
+    // share setting — owner only (checked above)
+    if (DESIGN_ACCESS.includes(body.access as DesignAccess)) data.access = body.access
     if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim().slice(0, 120)
     if (body.pages !== undefined) data.pages = toPages(body.pages)
     // canvas size (Magic Resize in place / restoring a differently-sized version)
@@ -42,6 +52,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({
       id: design.id,
       name: design.name,
+      access: design.access,
       updatedAt: design.updatedAt,
     })
   } catch (error) {
@@ -55,6 +66,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
+    const auth = await authorizeDesign(req, id, 'own')
+    if (auth.error) return auth.error
     if (req.nextUrl.searchParams.get('permanent') === '1') {
       await db.design.delete({ where: { id } })
       return NextResponse.json({ ok: true, permanent: true })

@@ -12,7 +12,7 @@ import { ExportDialog } from './ExportDialog'
 import { ResizeDialog } from './ResizeDialog'
 import { ShareDialog } from './ShareDialog'
 import { VersionHistoryDialog } from './VersionHistoryDialog'
-import { TranslateDialog } from './TranslateDialog'
+import { TranslateChip, TranslateDialog } from './TranslateDialog'
 import { MagicLayersDialog } from './MagicLayersDialog'
 import { PresenceAvatars } from './PresenceAvatars'
 import { useCommentsStore } from '@/lib/comments-store'
@@ -200,6 +200,7 @@ export function TopBar({ onSave, onShortcuts }: { onSave: () => Promise<void>; o
             </span>
           )}
         </Button>
+        <TranslateChip onOpenDialog={() => setTranslateOpen(true)} className={cn(item, 'hidden sm:flex')} />
         <button className={cn(item, 'hidden sm:flex')} onClick={toggleAnimate} aria-label="Animate">
           <Zap size={13} className={cn(animateOpen && 'text-[#02C0CC]')} /> Animate
         </button>

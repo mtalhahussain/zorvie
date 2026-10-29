@@ -1,7 +1,7 @@
 'use client'
 
 import { Link2, Check, Copy, Globe, Lock, QrCode } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useEditorStore } from '@/store/editor-store'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -11,22 +11,12 @@ import { toast } from '@/hooks/use-toast'
 type Access = 'private' | 'link' | 'public'
 
 const ACCESS_OPTS: { id: Access; label: string; desc: string; icon: typeof Lock }[] = [
-  { id: 'private', label: 'Only me', desc: 'Private to you', icon: Lock },
-  { id: 'link', label: 'Anyone with the link', desc: 'Can view or edit', icon: Link2 },
-  { id: 'public', label: 'Public', desc: 'Fine to share anywhere', icon: Globe },
+  { id: 'private', label: 'Only me', desc: 'Only this browser can open it', icon: Lock },
+  { id: 'link', label: 'Anyone with the link', desc: 'Can view, edit and comment', icon: Link2 },
+  { id: 'public', label: 'Public', desc: 'Anyone with the link — fine to post anywhere', icon: Globe },
 ]
 
-function readSavedAccess(designId: string | null): Access {
-  if (typeof window === 'undefined' || !designId) return 'link'
-  try {
-    const saved = localStorage.getItem(`canvix:share:${designId}`)
-    return saved === 'private' || saved === 'public' ? saved : 'link'
-  } catch {
-    return 'link' // storage blocked (private mode)
-  }
-}
-
-/** Canva-style Share dialog — copy link + access levels (local-first). */
+/** Canva-style Share dialog — copy link + server-enforced access level. */
 export function ShareDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const designId = useEditorStore((s) => s.designId)
   const designName = useEditorStore((s) => s.designName)
@@ -65,15 +55,43 @@ function ShareBody({ designId, designName, link, copied, onCopy }: {
   copied: boolean
   onCopy: () => void
 }) {
-  const [access, setAccess] = useState<Access>(() => readSavedAccess(designId))
+  const [access, setAccess] = useState<Access | null>(null)
+  const [isOwner, setIsOwner] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  const setAccessAndPersist = (a: Access) => {
-    setAccess(a)
+  // the access level lives on the server — it decides who can open the link
+  useEffect(() => {
     if (!designId) return
+    let cancelled = false
+    fetch(`/api/designs/${encodeURIComponent(designId)}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { access?: string; isOwner?: boolean } | null) => {
+        if (cancelled || !d) return
+        setAccess(d.access === 'link' || d.access === 'public' ? d.access : 'private')
+        setIsOwner(d.isOwner !== false)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [designId])
+
+  const setAccessAndPersist = async (a: Access) => {
+    if (!designId || saving || a === access) return
+    const prev = access
+    setAccess(a)
+    setSaving(true)
     try {
-      localStorage.setItem(`canvix:share:${designId}`, a)
+      const res = await fetch(`/api/designs/${encodeURIComponent(designId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access: a }),
+      })
+      if (!res.ok) throw new Error()
+      toast({ title: a === 'private' ? 'Only you can open this design now' : 'Anyone with the link can open this design' })
     } catch {
-      /* storage blocked — the choice still applies for this session */
+      setAccess(prev)
+      toast({ title: 'Could not change sharing', description: 'Please try again.', variant: 'destructive' })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -84,7 +102,9 @@ function ShareBody({ designId, designName, link, copied, onCopy }: {
           Share “{designName || 'Untitled design'}”
         </DialogTitle>
         <DialogDescription className="text-white/60">
-          Zorvie is local-first: the link points back to your Zorvie instance.
+          {access === 'private'
+            ? 'This design is private — set “Anyone with the link” so others can open it.'
+            : 'Anyone with this link can open and edit the design.'}
         </DialogDescription>
       </DialogHeader>
 
@@ -108,9 +128,10 @@ function ShareBody({ designId, designName, link, copied, onCopy }: {
           {ACCESS_OPTS.map((o) => (
             <button
               key={o.id}
-              onClick={() => setAccessAndPersist(o.id)}
+              onClick={() => void setAccessAndPersist(o.id)}
+              disabled={!isOwner || saving || access === null}
               className={cn(
-                'w-full flex items-center gap-3 px-3 py-3 text-left transition-colors',
+                'w-full flex items-center gap-3 px-3 py-3 text-left transition-colors disabled:cursor-not-allowed',
                 access === o.id ? 'bg-[#7630D7]/25' : 'hover:bg-white/5'
               )}
               aria-pressed={access === o.id}
@@ -126,7 +147,10 @@ function ShareBody({ designId, designName, link, copied, onCopy }: {
         </div>
 
         <p className="text-[11px] text-white/40 flex items-center gap-1.5">
-          <QrCode size={13} /> The access level is a reminder saved in this browser — anyone who can reach this Zorvie instance can open the link.
+          <QrCode size={13} />
+          {isOwner
+            ? 'Your designs belong to this browser. Other people only see a design you share with them.'
+            : 'Only the owner can change who has access.'}
         </p>
       </div>
     </>

@@ -370,7 +370,7 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
               width={t.width}
               lineHeight={t.lineHeight}
               letterSpacing={t.letterSpacing}
-              wrap="word"
+              wrap="word" direction={t.direction ?? 'inherit'}
               perfectDrawEnabled={false}
               ref={() => undefined}
             />
@@ -382,9 +382,9 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
         // canva "Splice": sliced look — ghost copies above & below
         return (
           <Group {...common}>
-            <Text text={rendered} fontSize={t.fontSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={withAlpha(t.fill, 0.35)} align={t.align === 'justify' ? 'left' : t.align} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" y={-Math.max(3, t.fontSize * 0.09)} perfectDrawEnabled={false} />
-            <Text text={rendered} fontSize={t.fontSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={withAlpha(t.fill, 0.35)} align={t.align === 'justify' ? 'left' : t.align} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" y={Math.max(3, t.fontSize * 0.09)} perfectDrawEnabled={false} />
-            <Text text={rendered} fontSize={t.fontSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={t.fill} align={t.align === 'justify' ? 'left' : t.align} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" perfectDrawEnabled={false} />
+            <Text text={rendered} fontSize={t.fontSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={withAlpha(t.fill, 0.35)} align={t.align === 'justify' ? 'left' : t.align} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" direction={t.direction ?? 'inherit'} y={-Math.max(3, t.fontSize * 0.09)} perfectDrawEnabled={false} />
+            <Text text={rendered} fontSize={t.fontSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={withAlpha(t.fill, 0.35)} align={t.align === 'justify' ? 'left' : t.align} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" direction={t.direction ?? 'inherit'} y={Math.max(3, t.fontSize * 0.09)} perfectDrawEnabled={false} />
+            <Text text={rendered} fontSize={t.fontSize} fontFamily={t.fontFamily} fontStyle={`${t.italic ? 'italic ' : ''}${t.bold ? 'bold' : 'normal'}`} fill={t.fill} align={t.align === 'justify' ? 'left' : t.align} width={t.width} lineHeight={t.lineHeight} letterSpacing={t.letterSpacing} wrap="word" direction={t.direction ?? 'inherit'} perfectDrawEnabled={false} />
           </Group>
         )
       }
@@ -404,7 +404,7 @@ export function ElementNode({ element: el, interactive, hiding, hideCell, regist
           width={t.width}
           lineHeight={t.lineHeight}
           letterSpacing={t.letterSpacing}
-          wrap="word"
+          wrap="word" direction={t.direction ?? 'inherit'}
           perfectDrawEnabled={false}
         />
       )

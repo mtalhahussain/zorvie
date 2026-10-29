@@ -10,7 +10,7 @@ export interface FontOption {
   family: string
   label: string
   weights: string
-  category: 'sans' | 'serif' | 'display' | 'handwriting' | 'mono'
+  category: 'sans' | 'serif' | 'display' | 'handwriting' | 'mono' | 'world'
 }
 
 export const FONTS: FontOption[] = [
@@ -82,6 +82,23 @@ export const FONTS: FontOption[] = [
   { family: 'DM Mono', label: 'DM Mono', weights: '400,500', category: 'mono' },
   { family: 'JetBrains Mono', label: 'JetBrains Mono', weights: '400,700', category: 'mono' },
   { family: 'Space Mono', label: 'Space Mono', weights: '400,700', category: 'mono' },
+  // ── World scripts (16) — used by Translate, loaded on demand per unicode-range ──
+  { family: 'Noto Nastaliq Urdu', label: 'Nastaliq (اردو)', weights: '400,700', category: 'world' },
+  { family: 'Noto Naskh Arabic', label: 'Naskh (العربية)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans Hebrew', label: 'Noto Hebrew (עברית)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans Devanagari', label: 'Noto Devanagari (हिन्दी)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans Bengali', label: 'Noto Bengali (বাংলা)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans Gurmukhi', label: 'Noto Gurmukhi (ਪੰਜਾਬੀ)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans Gujarati', label: 'Noto Gujarati (ગુજરાતી)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans Tamil', label: 'Noto Tamil (தமிழ்)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans Telugu', label: 'Noto Telugu (తెలుగు)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans Thai', label: 'Noto Thai (ไทย)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans SC', label: 'Noto Sans SC (简体)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans TC', label: 'Noto Sans TC (繁體)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans JP', label: 'Noto Sans JP (日本語)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans KR', label: 'Noto Sans KR (한국어)', weights: '400,700', category: 'world' },
+  { family: 'Noto Sans', label: 'Noto Sans (Кирилица · Ελληνικά)', weights: '400,700', category: 'world' },
+  { family: 'Noto Serif', label: 'Noto Serif (Кирилица · Ελληνικά)', weights: '400,700', category: 'world' },
 ]
 
 // Curated "font pairings" shown in the Text panel (Canva-style)

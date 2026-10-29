@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { authorizeDesign } from '@/lib/design-access'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -20,6 +21,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const existing = await db.comment.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ error: 'Comment not found.' }, { status: 404 })
+    const auth = await authorizeDesign(req, existing.designId, 'edit')
+    if (auth.error) return auth.error
 
     // resolve/reopen: anyone in the design can toggle (canva parity)
     if (typeof body.resolved === 'boolean') {
@@ -57,6 +60,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const actorId = req.nextUrl.searchParams.get('actorId')?.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) ?? ''
     const existing = await db.comment.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ error: 'Comment not found.' }, { status: 404 })
+    const auth = await authorizeDesign(req, existing.designId, 'edit')
+    if (auth.error) return auth.error
 
     // only the author may delete
     if (!actorId || actorId !== existing.authorId) {

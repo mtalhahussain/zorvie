@@ -14,6 +14,8 @@ import {
   type TextElement,
 } from '@/lib/types'
 import { useEditorStore } from '@/store/editor-store'
+import { findLanguage, isTranslated, restoreOriginal } from './translate'
+import { translateDesign } from './translate-client'
 
 export interface DesignAction {
   type: string
@@ -44,15 +46,6 @@ export interface DesignAction {
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/
-
-/** Flatten elements (groups included) for id-based lookups. */
-function flatElements(els: AnyElement[], out: AnyElement[] = []): AnyElement[] {
-  for (const el of els) {
-    out.push(el)
-    if (el.type === 'group') flatElements(el.children, out)
-  }
-  return out
-}
 
 function currentPageElements(): AnyElement[] {
   const s = useEditorStore.getState()
@@ -301,26 +294,21 @@ export async function applyDesignAction(action: DesignAction): Promise<string> {
     }
 
     case 'translate': {
-      const language = String(action.language ?? '').slice(0, 40)
-      if (!language) return 'No language given'
-      const texts: TextElement[] = []
-      for (const p of useEditorStore.getState().pages) {
-        for (const el of flatElements(p.elements)) {
-          if (el.type === 'text') texts.push(el as TextElement)
-        }
+      const raw = String(action.language ?? '').slice(0, 40)
+      if (!raw) return 'No language given'
+      const state = useEditorStore.getState()
+      if (/^(original|restore|undo translation)$/i.test(raw.trim())) {
+        if (!isTranslated(state.pages)) return 'Design is already in its original language'
+        state.replacePagesForTranslate(restoreOriginal(state.pages))
+        return 'Original text restored'
       }
-      if (!texts.length) return 'No text to translate'
-      const res = await fetch('/api/ai/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language, texts: texts.map((t) => t.text) }),
-      })
-      const data = (await res.json().catch(() => ({}))) as { translations?: string[]; error?: string }
-      if (!res.ok || !Array.isArray(data.translations) || data.translations.length !== texts.length) {
-        throw new Error(data.error ?? 'Translation failed')
-      }
-      useEditorStore.getState().translateTexts(texts.map((t, i) => ({ id: t.id, text: data.translations![i] })))
-      return `Translated ${texts.length} texts to ${language}`
+      const lang = findLanguage(raw) ?? { code: raw.toLowerCase(), name: raw, native: raw, script: 'latin' as const }
+      const res = await translateDesign(state.pages, lang, { fixFonts: true, autoFit: true })
+      if (!res.translated) throw new Error('Translation failed')
+      useEditorStore.getState().replacePagesForTranslate(res.pages)
+      return res.failed
+        ? `Translated ${res.translated} of ${res.total} texts to ${lang.name} (${res.failed} failed)`
+        : `Translated ${res.total} texts to ${lang.name} — say "restore original" to switch back`
     }
 
     case 'magicAnimate':

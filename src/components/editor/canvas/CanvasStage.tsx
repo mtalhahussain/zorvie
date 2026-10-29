@@ -902,6 +902,7 @@ export default function CanvasStage() {
         <textarea
           className="cv-textarea-overlay"
           style={textareaStyle}
+          dir={editingText.direction ?? 'auto'}
           value={editValue}
           autoFocus
           onChange={(e) => {
@@ -929,6 +930,7 @@ export default function CanvasStage() {
         <textarea
           className="cv-textarea-overlay"
           style={cellStyle}
+          dir="auto"
           value={editValue}
           autoFocus
           onChange={(e) => {

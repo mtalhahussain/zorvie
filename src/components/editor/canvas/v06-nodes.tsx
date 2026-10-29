@@ -32,7 +32,7 @@ export function CurvedTextNode({ t, common }: { t: TextElement; common: Record<s
         width={t.width}
         lineHeight={t.lineHeight}
         letterSpacing={t.letterSpacing}
-        wrap="word"
+        wrap="word" direction={t.direction ?? 'inherit'}
         perfectDrawEnabled={false}
       />
     )

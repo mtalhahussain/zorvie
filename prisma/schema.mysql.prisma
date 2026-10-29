@@ -28,9 +28,15 @@ model Design {
   source     String          @default("blank") // blank | template:<id> | duplicate:<id> | resize:<id>
   // soft delete (dashboard Trash) — null = live design
   deletedAt  DateTime?
+  // anonymous browser session that owns the design (cv_sid cookie) — null = legacy, unclaimed
+  ownerId    String?
+  // private (owner only) | link | public — link/public: anyone with the link can view & edit
+  access     String          @default("private")
   versions   DesignVersion[]
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
+
+  @@index([ownerId, deletedAt, updatedAt])
 }
 
 // Server-side version snapshots for a design (Canva "Version history").

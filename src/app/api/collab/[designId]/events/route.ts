@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { authorizeDesign } from '@/lib/design-access'
 import {
   MAX_EVENTS_PER_FLUSH,
   OP_KINDS,
@@ -29,6 +30,8 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ designId: string }> }) {
   const { designId } = await params
+  const auth = await authorizeDesign(req, designId, 'edit')
+  if (auth.error) return auth.error
   try {
     const body = (await req.json().catch(() => ({}))) as EventsBody
     const pid = (body.pid ?? '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40)

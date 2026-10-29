@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+import { authorizeDesign } from '@/lib/design-access'
 
 // GET /api/designs/[id]/versions — list server-side version snapshots (newest first)
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
+    const auth = await authorizeDesign(req, id, 'edit')
+    if (auth.error) return auth.error
     const versions = await db.designVersion.findMany({
       where: { designId: id },
       orderBy: { createdAt: 'desc' },
@@ -33,10 +36,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
+    const auth = await authorizeDesign(req, id, 'edit')
+    if (auth.error) return auth.error
     const body = await req.json()
-
-    const exists = await db.design.findUnique({ where: { id }, select: { id: true } })
-    if (!exists) return NextResponse.json({ error: 'Design not found' }, { status: 404 })
 
     const version = await db.designVersion.create({
       data: {

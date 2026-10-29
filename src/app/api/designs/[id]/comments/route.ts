@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { authorizeDesign } from '@/lib/design-access'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -10,9 +11,11 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
  * GET /api/designs/[id]/comments — all comment threads for a design.
  * POST — add a comment (top-level pin or reply via parentId).
  */
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
+    const auth = await authorizeDesign(req, id, 'edit')
+    if (auth.error) return auth.error
     const comments = await db.comment.findMany({
       where: { designId: id },
       orderBy: [{ createdAt: 'asc' }],
@@ -57,6 +60,8 @@ interface CommentBody {
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: designId } = await params
   try {
+    const auth = await authorizeDesign(req, designId, 'edit')
+    if (auth.error) return auth.error
     const body = (await req.json().catch(() => ({}))) as CommentBody
 
     const text = (body.body ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, 2000)
