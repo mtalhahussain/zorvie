@@ -79,6 +79,24 @@ function newBlankPages() {
   return [createPage()]
 }
 
+/** Saved thumbnail, else the source template's first page (designs opened
+ *  from a template but never edited have no captured thumbnail yet). */
+function DesignThumb({ design }: { design: DesignMeta }) {
+  if (design.thumbnail) {
+    return <img src={design.thumbnail} alt={design.name} className="w-full h-full object-cover" />
+  }
+  const slug = design.source.startsWith('template:') ? design.source.slice('template:'.length) : null
+  const template = slug ? TEMPLATES.find((t) => t.slug === slug) : undefined
+  if (template?.pages[0]) {
+    return <DesignPreview page={template.pages[0]} width={template.width} height={template.height} />
+  }
+  return (
+    <span className="absolute inset-0 flex items-center justify-center text-white/30 text-xs font-medium">
+      {design.width} × {design.height}
+    </span>
+  )
+}
+
 export function Dashboard() {
   const goLanding = useAppStore((s) => s.goLanding)
   const openEditor = useAppStore((s) => s.openEditor)
@@ -88,6 +106,7 @@ export function Dashboard() {
   const [helpOpen, setHelpOpen] = useState(false)
 
   const [query, setQuery] = useState('')
+  const needle = query.trim().toLowerCase()
   const [category, setCategory] = useState<string>('all')
   const [customOpen, setCustomOpen] = useState(false)
   const [customW, setCustomW] = useState('1080')
@@ -147,20 +166,22 @@ export function Dashboard() {
         height: t.height,
         accent: t.accent,
         pages: t.pages,
-      })).filter((t) => category === 'all' || t.category === category),
-    [category]
+      }))
+        .filter((t) => category === 'all' || t.category === category)
+        .filter((t) => !needle || t.name.toLowerCase().includes(needle) || t.category.toLowerCase().includes(needle)),
+    [category, needle]
   )
 
   const filteredDesigns = useMemo(
     () =>
       (designs ?? [])
-        .filter((d) => d.name.toLowerCase().includes(query.toLowerCase()))
+        .filter((d) => d.name.toLowerCase().includes(needle))
         .sort((a, b) =>
           sort === 'name'
             ? a.name.localeCompare(b.name)
             : new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         ),
-    [designs, query, sort]
+    [designs, needle, sort]
   )
 
   // ── actions ─────────────────────────────────────────────────
@@ -314,7 +335,7 @@ export function Dashboard() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your designs"
+              placeholder="Search designs and templates"
               className="pl-10 h-10 rounded-full bg-white/[0.06] border-white/10 text-white placeholder:text-white/35 focus-visible:ring-[#7630D7]/50 focus-visible:border-[#7630D7]/60"
               aria-label="Search designs"
             />
@@ -450,6 +471,14 @@ export function Dashboard() {
               </button>
             ))}
           </div>
+          {needle && filteredTemplates.length === 0 && (
+            <div className="mt-4 rounded-2xl border border-dashed border-white/12 p-8 text-center text-sm text-white/45">
+              No templates match “{query.trim()}”.{' '}
+              <button className="text-[#A78BFA] hover:underline" onClick={() => setQuery('')}>
+                Clear search
+              </button>
+            </div>
+          )}
         </section>
 
         {/* ── Brand kit ── */}
@@ -554,13 +583,7 @@ export function Dashboard() {
                     style={{ aspectRatio: `${d.width} / ${d.height}` }}
                     aria-label={`Open ${d.name}`}
                   >
-                    {d.thumbnail ? (
-                      <img src={d.thumbnail} alt={d.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="absolute inset-0 flex items-center justify-center text-white/30 text-xs font-medium">
-                        {d.width} × {d.height}
-                      </span>
-                    )}
+                    <DesignThumb design={d} />
                   </button>
                   <div className="mt-2 flex items-start justify-between gap-1">
                     <div className="min-w-0">
@@ -632,13 +655,7 @@ export function Dashboard() {
                         className="relative rounded-xl overflow-hidden border border-white/10 bg-[#0F1015] grayscale group-hover:grayscale-0 transition-all"
                         style={{ aspectRatio: `${d.width} / ${d.height}` }}
                       >
-                        {d.thumbnail ? (
-                          <img src={d.thumbnail} alt={d.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="absolute inset-0 flex items-center justify-center text-white/30 text-xs font-medium">
-                            {d.width} × {d.height}
-                          </span>
-                        )}
+                        <DesignThumb design={d} />
                       </div>
                       <div className="mt-2 flex items-start justify-between gap-1">
                         <div className="min-w-0">
